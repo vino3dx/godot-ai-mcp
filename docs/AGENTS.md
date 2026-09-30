@@ -343,48 +343,7 @@ EDITOR_CONFLICT_WARNING
 
 不要因此引入 Editor Plugin。
 
-## 10. 参考项目取舍
-
-Coding-Solo godot-mcp
-
-必须保留这些能力：
-
-launch_editor
-run_project
-get_debug_output
-stop_project
-get_godot_version
-list_projects
-get_project_info
-create_scene
-add_node
-load_sprite
-export_mesh_library
-save_scene
-get_uid
-update_project_uids
-
-只复用：
-
-Godot 可执行文件路径检测
-
-Godot CLI 启动逻辑
-
-其余架构重新设计。
-
-NPGameDev godot-mcp-toolkit
-
-只吸收能力，不复制架构。
-
-A：文件 / Resource 能力 → 纯文件重新实现。
-
-B：活 Scene Tree / Undo / Editor → 只做 .tscn 读改写，不做 Undo/Redo 和实时编辑器同步。
-
-C：Runtime → 只保留 run / stop / debug output / screenshot 等必要能力，由 Runtime Adapter 实现。
-
-如果改写其代码，必须在 ATTRIBUTIONS.md 保留 MIT 版权声明。
-
-## 11. 第一版能力
+## 10. 第一版能力
 
 必须覆盖：
 
@@ -408,7 +367,7 @@ Navigation
 Audio
 Import Settings
 
-## 12. 当前开发阶段
+## 11. 当前开发阶段
 
 项目阶段：
 
@@ -427,8 +386,6 @@ Stage 9  第二版扩展
 Stage 1：
 
 架构设计
-
-toolkit 映射表
 
 类型系统
 
@@ -459,7 +416,7 @@ npm run build
 
 Stage 2～9 禁止提前实现。
 
-## 13. 测试规范
+## 12. 测试规范
 
 核心 Service 必须有测试。
 
@@ -504,7 +461,7 @@ npm run build
 
 测试失败必须修复后再交付。
 
-## 14. Agent 工作协议
+## 13. Agent 工作协议
 
 每个 Agent 接任务后：
 
@@ -536,7 +493,7 @@ npm run build
 
 不要默默改变架构
 
-## 15. 模型接力策略
+## 14. 模型接力策略
 
 GLM-5.3
 
@@ -594,7 +551,7 @@ DeepSeek-V4.1-Flash
 
 模型可以随时替换，项目架构不能依赖某一个模型。
 
-## 16. 任务切割
+## 15. 任务切割
 
 不要给 Agent：
 
@@ -620,7 +577,7 @@ Task 3.7  Review
 
 可独立回滚
 
-## 17. 回复规范
+## 16. 回复规范
 
 中文优先，结论先行，简洁直接。
 
@@ -643,7 +600,7 @@ Task 3.7  Review
 
 为了“完整”提前实现未来 Stage
 
-## 18. 质量底线
+## 17. 质量底线
 
 以下均不可接受：
 
@@ -667,7 +624,7 @@ Runtime 依赖渗透到普通 Resource 操作
 
 未经允许扩大当前 Stage
 
-## 19. 规则优先级
+## 18. 规则优先级
 
 发生冲突时：
 

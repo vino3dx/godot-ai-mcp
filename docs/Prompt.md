@@ -22,31 +22,7 @@
 
 ---
 
-## 二、参考资料与取舍
-
-### 1. godot-mcp(Coding-Solo,MIT)
-以下 14 个能力必须全部保留(名称可统一改写):
-launch_editor、run_project、get_debug_output、stop_project、get_godot_version、list_projects、get_project_info、create_scene、add_node、load_sprite、export_mesh_library、save_scene、get_uid、update_project_uids。
-
-只复用它的 **Godot 可执行文件路径检测** 和 **CLI 启动逻辑**,放入 Runtime 层。其余按新架构重写。
-
-### 2. godot-mcp-toolkit-main.zip(NPGameDev,MIT,约 100 个命令)
-先分析,再取舍,不复制其架构。分三类处理:
-
-| 类别 | 内容 | 处理 |
-|---|---|---|
-| A 文件/资源级 | tileset、spriteframes、procedural(曲线/渐变/噪声)、audiobus、theme、texture/sound generate、resource、classdb、input_map、project 设置与 layer names、script.check、file/folder、导航/路径编辑 | 全部重新实现为纯文件版本 |
-| B 活场景树 + Undo/Redo | scene.*、node.*、signal、animation、autoload、editor.*、debug 断点 | 只实现"读 .tscn → 修改 → 写回"的版本,放弃 Undo 和编辑器实时同步 |
-| C 运行中的游戏 | game.start/stop、playtest、输入注入、runtime 状态 | 只保留 run / stop / debug output / 截图,由 Runtime Adapter 实现 |
-
-注意:
-* toolkit 的桥接包 `@npgamedev/godot-mcp-server` 不在压缩包内,其 schema 需要自行设计。
-* 如果改写自 toolkit 的代码,在 `ATTRIBUTIONS.md` 中保留 NPGameDev 的 MIT 版权声明;godot-mcp 同理。
-* 先输出"toolkit 命令 → 新工具"的映射表,再开始实现相关阶段。
-
----
-
-## 三、能力范围
+## 二、能力范围
 
 | 范围 | 内容 |
 |---|---|
@@ -63,7 +39,7 @@ launch_editor、run_project、get_debug_output、stop_project、get_godot_versio
 
 ---
 
-## 四、目标结构
+## 三、目标结构
 
 ```
 godot-ai-mcp/
@@ -129,7 +105,7 @@ Registry 需支持:领域分组、按组按需加载、只读/写入/破坏性�
 
 ---
 
-## 五、并发与排队(核心能力)
+## 四、并发与排队(核心能力)
 
 多个 agent/任务可能同时操作同一个项目,需要保护。放在 `core/concurrency`,由 **Service 层**统一使用,Tool 不各自处理。
 
@@ -157,13 +133,13 @@ Registry 需支持:领域分组、按组按需加载、只读/写入/破坏性�
 
 ---
 
-## 六、阶段计划
+## 五、阶段计划
 
 **规则:每个阶段自带测试;完成后先测试、验证、整理,再进入下一阶段。不要一次性生成所有工具。**
 
 ### 阶段 1:架构与最小可运行 Server
 只输出并实现:
-* 架构设计文档(含 toolkit 映射表、并发设计)
+* 架构设计文档(含并发设计)
 * 类型系统
 * Tool Registry(含分组与按需加载)
 * MCP Server(stdio)
@@ -204,7 +180,6 @@ Material 至少覆盖:创建/读取/修改、类型分析、Shader 绑定、Shad
 * 创建/读取/保存/分析 Scene
 * Node 查询/创建/删除/重命名/移动/属性修改/父子关系修改/批量操作
 * Scene 合并/拆分、PackedScene 分析、Scene 依赖分析、Node 类型统计
-* 覆盖 godot-mcp 原有的 create_scene、add_node、save_scene、load_sprite
 
 ### 阶段 5:Resource / Asset
 通用 Resource Service:
@@ -222,7 +197,7 @@ GDScript 创建/查询、类/函数/信号/export 属性分析、脚本引用分
 MCP Tool → RuntimeService → Godot CLI → Process → Output Parser
 ```
 只有这些能力调用 Godot:launch_editor、run_project、stop_project、get_debug_output、validate_project、execute_script、capture_screenshot、export_mesh_library、reimport。
-使用第五节的项目级运行队列。Runtime 代码不得进入普通 Tool。
+使用第四节的项目级运行队列。Runtime 代码不得进入普通 Tool。
 
 ### 阶段 8:第一版整理
 * 统计现有工具,检查重复、命名、schema、返回结构、错误结构是否统一
@@ -238,7 +213,7 @@ MCP Tool → RuntimeService → Godot CLI → Process → Output Parser
 
 ---
 
-## 七、测试要求
+## 六、测试要求
 
 * 核心 Service 都要有单元测试。
 * 包含:Tool schema 校验、Parser、序列化往返、Scene 修改、Shader、Material、Project、并发锁与队列、Runtime Adapter(可用假进程 mock)。
@@ -248,7 +223,7 @@ MCP Tool → RuntimeService → Godot CLI → Process → Output Parser
 
 ---
 
-## 八、未来扩展
+## 七、未来扩展
 
 新增工具时:`NewTool → 调用已有 Service → 注册到 Tool Registry`,不修改核心架构。
 

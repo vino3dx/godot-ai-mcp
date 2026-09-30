@@ -31,7 +31,7 @@
 | T5 | `ShaderService`:通用 `ShaderParameter{name,type,defaultValue,hint,hintRange}` 模型,uniform 增删改/分析、render_mode、基础检查 | 每个 uniform 类型/hint 有测试 | 中高(设计决定后续扩展) | 强模型设计 + Flash 补工具 |
 | T6 | `MaterialService`:ShaderMaterial/StandardMaterial3D 读写、参数绑定/同步、重复检测 | 往返 + 用 T2 的写入器 | 中 | 强模型 |
 | T7 | 场景/节点工具批量(node_* / scene_*) | 基于 T2 的服务;每工具"改前→工具→改后→再解析" | 低~中 | Flash(有 T2 之后) |
-| T8 | Runtime Adapter:Godot 路径检测(可参考 godot-mcp 的实现)、CLI 启动、输出解析、项目级运行队列、`--dump-extension-api` 缓存 | 用假进程测试队列/超时/abort;真实 Godot 测试单独标记可跳过 | 中高(进程管理) | 强模型 |
+| T8 | Runtime Adapter:Godot 路径检测、CLI 启动、输出解析、项目级运行队列、`--dump-extension-api` 缓存 | 用假进程测试队列/超时/abort;真实 Godot 测试单独标记可跳过 | 中高(进程管理) | 强模型 |
 | T9 | 阶段 8 整理:`docs/tools.md` 生成、命名/schema/返回结构一致性检查 | 有脚本自动检查 | 低 | Flash |
 
 **顺序**:提供 fixtures → T1/T2 → T3/T4 → T5 → T6 → T7 → T8 → T9。T2 没有完成前,不要开始 T5~T7。

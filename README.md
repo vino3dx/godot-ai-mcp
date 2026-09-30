@@ -31,5 +31,4 @@ node dist/src/index.js                     # 作为 MCP server 运行(stdio)
 - `AGENTS.md` 项目最高级规范(架构底线、质量红线、任务协议)
 - `docs/architecture.md` 分层、MCP 适配层已核实事实、错误约定
 - `docs/concurrency.md` 文件锁与项目运行队列
-- `docs/toolkit-mapping.md` godot-mcp-toolkit 命令的取舍与去向
 - `docs/HANDOFF.md` 后续阶段的任务卡与分工建议(给接力的模型看)
