@@ -1,0 +1,26 @@
+{
+  "name": "godot-ai-mcp",
+  "version": "0.1.0",
+  "description": "Standalone MCP server for Godot 4.7.2 projects (file-based, no editor required).",
+  "type": "module",
+  "bin": {
+    "godot-ai-mcp": "./dist/src/index.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
+    "dev:call": "node dist/src/dev-cli.js"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.2.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.2.0"
+  }
+}

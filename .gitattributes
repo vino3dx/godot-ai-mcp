@@ -1,0 +1,20 @@
+# 统一行尾:仓库内与工作区都用 LF。
+# 原因:本项目要对 Godot 文本资源(.tscn/.tres/project.godot/.gdshader/.gd/.import)做
+# 「读取 → 修改 → 写回 → 再读取」的字节级无损往返;若 checkout 时被 CRLF 改写,
+# 往返测试会出现无意义的差异。Godot 自身在各平台都写 LF,所以固定为 LF 才与引擎一致。
+* text=auto eol=lf
+
+# 二进制文件不参与行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.ttf binary
+*.otf binary
+*.wav binary
+*.ogg binary
+*.mp3 binary
+*.res binary
+*.scn binary
+*.zip binary
