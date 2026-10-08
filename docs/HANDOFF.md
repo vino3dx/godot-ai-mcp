@@ -11,9 +11,8 @@
 见 **`docs/WORKFLOW.md`**(工作流唯一权威版本)——开工协议、红线、防幻觉、防绕圈、提交规范与回报模板都在那里。本文件不再重复维护规则,以免出现两套互相冲突的规则。
 
 ## 你需要先做的一件事:提供 4.7.2 真实样例
-在你的机器上用 Godot 4.7.2 新建一个小项目,把这些文件放进 `tests/fixtures/`:
-`project.godot`、一个含多种节点/子资源/信号连接/实例化子场景的 `.tscn`、一个 `.tres`(Material 和 Shader 各一个)、一个 `.gdshader`、一个 `.gd`、一个带 `.uid` 的资源。
-解析器的正确性完全取决于它们;没有它们,任何模型写出来的解析器都只是猜测。
+
+fixtures 清单与来源要求见 `tests/fixtures/README.md` 与 `docs/PLAN_PROMPTS.md` 的 P0 节。
 
 ## 任务卡
 
