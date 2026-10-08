@@ -55,7 +55,7 @@ Claude 验收要点:`git ls-files | grep -E "^(dist|\.workbuddy)/"` 无输出;�
 
 ---
 
-## P1 基础设施
+## P1 基础设施 ✅ ad90372
 
 ```text
 任务 P1:写操作与路径的基础设施(不实现任何领域工具)。
