@@ -1,2 +1,6 @@
 *.log
 node_modules/
+# 构建产物与本地工作目录,不入库(.workbuddy/ 是本机记忆/日志目录)
+dist/
+.workbuddy/
+.godot-ai-mcp/
