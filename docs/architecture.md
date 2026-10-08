@@ -32,9 +32,20 @@ Types          src/types      共享类型,零依赖
 
 ## 统一约定
 - 返回:成功 `{ ok:true, data, message? }`;失败 `{ ok:false, error:{ code, message, details? } }`,MCP 侧以 JSON 文本返回,失败时 `isError:true`。
-- 错误码(只追加不改名):INVALID_ARGUMENT / TOOL_NOT_FOUND / FILE_NOT_FOUND / PARSE_ERROR / LOCK_TIMEOUT / TASK_TIMEOUT / RUNTIME_REQUIRED / RUNTIME_FAILED / INTERNAL。
+- **warnings**:非致命提示走 `{ ok:true, data, warnings?: string[] }`(例如 `EDITOR_CONFLICT_WARNING`),不是错误。ToolHost 透传,空数组不出现。
+- 错误码(只追加不改名):INVALID_ARGUMENT / TOOL_NOT_FOUND / FILE_NOT_FOUND / PARSE_ERROR / LOCK_TIMEOUT / TASK_TIMEOUT / RUNTIME_REQUIRED / RUNTIME_FAILED / INTERNAL / PROJECT_NOT_FOUND / RESOURCE_NOT_FOUND / GODOT_NOT_FOUND / GODOT_PROCESS_FAILED / VALIDATION_FAILED / FILE_CHANGED。
 - 按需加载:环境变量 `GODOT_AI_MCP_GROUPS=project,shader` 只暴露这些领域,减少 agent 上下文占用。
 - **错误边界**:上面这套信封覆盖"工具执行"阶段。但**未知工具名**在 MCP 协议层就被 SDK 拒绝(JSON-RPC `-32602`),根本到不了 ToolHost;ToolHost 的 `TOOL_NOT_FOUND` 只在本进程内可达(dev-cli / 单测)。这是 SDK 在履职,不去对抗它。
+
+## 写操作约定(P1 起,所有写工具统一遵守)
+
+- 所有写工具接受 `dryRun?: boolean`:只计算不落盘。
+- 所有写工具接受 `expectedHash?: string`(被修改文件当前内容的 sha256,hex):不匹配抛 `FILE_CHANGED`。它是乐观并发控制的唯一手段 —— 编辑器/其他 agent 改了同一个文件时必须能被发现,而不是静默覆盖。
+- 写工具返回 `{ changed, diff, newHash }`:`changed=false` 时 `diff` 为空串;`diff` 是行级 unified diff,由 `core/filesystem/unifiedDiff.ts` 生成(无新依赖,单点修改与 git 输出一致,多处分散改动合并成一个 hunk)。
+- 所有 list/搜索类工具带 `limit` / `offset`,并用 `core/output.ts` 的 `paginate()` 返回 `{ items, total, nextOffset }`;文本类输出用 `truncateText(text, maxBytes)` 按 UTF-8 边界截断,返回 `{ text, truncated }`。
+- 落盘一律走 `core/filesystem/safeWrite.ts`:同目录临时文件 + `rename`(原子),Windows 下短暂的 `EPERM/EACCES/EBUSY` 少量重试;内容统一 LF;失败时清理临时文件,不动原文件。
+- 路径一律先过 `core/filesystem/fileGuard.ts`:只接受 `res://…`、项目相对路径、项目内绝对路径;拒绝 `..` 穿越、符号链接/junction 逃逸、项目外绝对路径、`user://`(报 INVALID_ARGUMENT)。
+- 项目根由 `core/project/projectResolver.ts` 决定:工具参数 `projectPath` > 环境变量 `GODOT_PROJECT_PATH` > 从 cwd 向上查找 `project.godot`;找不到抛 `PROJECT_NOT_FOUND`。它作为 `AppContext.project` 提供给 Service 层。
 
 ## MCP 适配层(已核实,`src/mcp/server/sdkServer.ts`)
 

@@ -32,6 +32,24 @@ test("ok / invalid args / unknown tool / GodotMcpError / unexpected error", asyn
   assert.equal(toMcpContent(b).isError, true);
 });
 
+test("warnings are non-fatal hints, passed through to the result and the MCP content", async () => {
+  const reg = new ToolRegistry().registerAll([
+    t("utility_warn", async () => ({ data: { n: 1 }, warnings: ["EDITOR_CONFLICT_WARNING: scene is open in the editor"] })),
+    t("utility_nowarn", async () => ({ data: { n: 1 }, warnings: [] })),
+  ]);
+  const h = new ToolHost(reg, {}, quiet);
+
+  const w = await h.callTool("utility_warn", { x: 1 });
+  assert.deepEqual(w, { ok: true, data: { n: 1 }, warnings: ["EDITOR_CONFLICT_WARNING: scene is open in the editor"] });
+  const block = toMcpContent(w).content[0];
+  assert.ok(block);
+  assert.equal(JSON.parse(block.text).warnings[0].startsWith("EDITOR_CONFLICT_WARNING"), true);
+  assert.equal(toMcpContent(w).isError, undefined);
+
+  // 空数组不制造噪音
+  assert.deepEqual(await h.callTool("utility_nowarn", { x: 1 }), { ok: true, data: { n: 1 } });
+});
+
 test("minimal real tools through the composition root", async () => {
   const h = buildHost(quiet);
   assert.deepEqual(h.listTools().map((x) => x.name).sort(), ["utility_ping", "utility_task_status"]);

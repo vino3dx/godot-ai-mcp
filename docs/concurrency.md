@@ -20,6 +20,12 @@ await locks.withLocks([fileA, fileB], owner, async () => { /* 写多个文件 */
 | 超时 | `timeoutMs` 到点从队列摘除自己并抛 `LOCK_TIMEOUT`,details 带 `{ key, waitedMs, heldBy, heldForMs }` |
 | 事务性 | 多 key 获取途中某个超时,已持有的会被 `finally` 释放,不会泄漏 |
 
+**锁不可重入(重要)**:同一把锁在同一调用链上再次获取会**死锁**(后到者排队等在原地)。
+
+- Service **只在公共入口加一次锁**,拿到锁后调用的私有/内部方法**不得**再对同一 key 调 `acquire` / `withLocks`。
+- 需要"我已在锁里"的能力时,把已解锁的逻辑拆成私有方法(如 `writeUnlocked()`),公共入口加锁后调用它;不要把锁传递给内部方法。
+- `withLocks` 对多个 key 去重 + 排序,所以同一批 key 内重复传同一路径是安全的;不安全的是"里面再套一层"。`TaskQueue` 的 `godot-run:` key 同理。
+
 **占用信息**(等锁的人知道"谁在跑"):
 
 - `LockOwner = { tool, target, taskId, since }`,taskId 缺省由 `newTaskId()` 生成(`t<base36 时间>-<base36 序号>`)。

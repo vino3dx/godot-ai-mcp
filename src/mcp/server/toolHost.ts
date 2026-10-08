@@ -33,7 +33,12 @@ export class ToolHost<Ctx> {
     if (!v.ok) return fail("INVALID_ARGUMENT", `Invalid arguments for ${name}`, { errors: v.errors });
     try {
       const out = await tool.handler(v.value as Record<string, unknown>, this.ctx);
-      return { ok: true, data: out.data, ...(out.message !== undefined ? { message: out.message } : {}) };
+      return {
+        ok: true, data: out.data,
+        ...(out.message !== undefined ? { message: out.message } : {}),
+        // warnings 是非致命提示(如 EDITOR_CONFLICT_WARNING),与错误信封分开;空数组不出现
+        ...(out.warnings && out.warnings.length > 0 ? { warnings: out.warnings } : {}),
+      };
     } catch (e) {
       if (e instanceof GodotMcpError) return fail(e.code, e.message, e.details);
       this.logger.error(`Unhandled error in ${name}`, e instanceof Error ? e.stack : String(e));
@@ -46,7 +51,7 @@ function fail(code: Extract<ToolResult, { ok: false }>["error"]["code"], message
   return { ok: false, error: { code, message, ...(details ? { details } : {}) } };
 }
 
-/** ToolResult → MCP 文本内容(统一 JSON)。 */
+/** ToolResult → MCP 文本内容(统一 JSON)。warnings 随信封整体序列化,无需额外处理。 */
 export function toMcpContent(r: ToolResult): { content: Array<{ type: "text"; text: string }>; isError?: boolean } {
   return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }], ...(r.ok ? {} : { isError: true }) };
 }

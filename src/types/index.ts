@@ -3,7 +3,9 @@
 /** 稳定错误码。只追加,不改名。 */
 export type ErrorCode =
   | "INVALID_ARGUMENT" | "TOOL_NOT_FOUND" | "FILE_NOT_FOUND" | "PARSE_ERROR"
-  | "LOCK_TIMEOUT" | "TASK_TIMEOUT" | "RUNTIME_REQUIRED" | "RUNTIME_FAILED" | "INTERNAL";
+  | "LOCK_TIMEOUT" | "TASK_TIMEOUT" | "RUNTIME_REQUIRED" | "RUNTIME_FAILED" | "INTERNAL"
+  | "PROJECT_NOT_FOUND" | "RESOURCE_NOT_FOUND" | "GODOT_NOT_FOUND" | "GODOT_PROCESS_FAILED"
+  | "VALIDATION_FAILED" | "FILE_CHANGED";
 
 /** 最小 JSON Schema 子集(工具入参),校验器只支持这些字段,见 core/validation。 */
 export interface JsonSchema {
@@ -33,12 +35,15 @@ export interface Logger {
   error(msg: string, meta?: unknown): void;
 }
 
-/** 工具处理函数的返回(成功时)。失败一律 throw GodotMcpError。 */
-export interface ToolOutput { data: unknown; message?: string }
+/**
+ * 工具处理函数的返回(成功时)。失败一律 throw GodotMcpError。
+ * warnings:非致命提示(例如 EDITOR_CONFLICT_WARNING),走这里而不是错误。
+ */
+export interface ToolOutput { data: unknown; message?: string; warnings?: string[] }
 
 /** 统一的工具执行结果(ToolHost 产出)。 */
 export type ToolResult =
-  | { ok: true; data: unknown; message?: string }
+  | { ok: true; data: unknown; message?: string; warnings?: string[] }
   | { ok: false; error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };
 
 export interface ToolAnnotations { readOnly: boolean; destructive?: boolean; idempotent?: boolean }
