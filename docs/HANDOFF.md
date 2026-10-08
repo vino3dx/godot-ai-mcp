@@ -6,13 +6,9 @@
 - **T0 已完成**:依赖已安装,`src/mcp/server/sdkServer.ts` 已按真实 `.d.mts` 重写(不再用 `any`,不再有占位 schema),并用官方 `@modelcontextprotocol/client` 经 stdio 验证了连接、`tools/list`(JSON Schema 真的上线)、`tools/call`、统一错误信封。legacy(2025 `initialize`)与 modern(2026-07-28 `server/discover`)两个 era 都验证过。
 - 已核实的 SDK 事实(版本、`serveStdio`、Standard Schema 契约、注解字段名、schema 桥接为何不做拒绝)都写在 `docs/architecture.md` 的「MCP 适配层」一节。**别凭记忆改这部分。**
 
-## 给接力模型的固定规则(每次任务开头贴上)
-1. 先读 `AGENTS.md`、`docs/architecture.md` 和本文件,只做**被分配的那一张任务卡**,不要顺手做别的。
-2. 改完必须 `npm test` 全绿;`tests/architecture.test.ts` 不许改弱、不许绕过。
-3. 不要修改 `src/core/concurrency/`、`src/mcp/`、`tests/architecture.test.ts`,除非任务卡明确要求。
-4. Tool 里不写文件/解析逻辑,只调 Service。不确定 4.7.2 文件格式细节时,以 `tests/fixtures` 里的真实文件为准,没有就停下来问,不要凭记忆写。
-5. 不新增依赖(除非任务卡说明);不使用 `console.log`;失败一律抛 `GodotMcpError`。
-6. 完成后回报:改了哪些文件、新增了哪些测试、哪些事没做。
+## 给接力模型的固定规则
+
+见 **`docs/WORKFLOW.md`**(工作流唯一权威版本)——开工协议、红线、防幻觉、防绕圈、提交规范与回报模板都在那里。本文件不再重复维护规则,以免出现两套互相冲突的规则。
 
 ## 你需要先做的一件事:提供 4.7.2 真实样例
 在你的机器上用 Godot 4.7.2 新建一个小项目,把这些文件放进 `tests/fixtures/`:
@@ -43,4 +39,4 @@
 ## 环境备注
 - 目标 Godot 版本 4.7.2;当前沙箱**没有** Godot 可执行文件,真实 Runtime 测试(T8)需要你在本机跑。
 - 本机已装 Node 22.22.2;`npm install` 可用(有网络)。构建产物在 `dist/`,入口 `dist/src/index.js`。
-- 仓库尚未 `git init`。开工前建议先初始化并提交阶段 1 基线,便于后续每个任务卡独立回滚。
+- 仓库已 `git init`;基线见 `git log`(Stage 1 基线 `216beb8` → P0 `05472a9`,每个任务卡一个提交,便于独立回滚)。

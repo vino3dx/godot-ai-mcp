@@ -1,5 +1,7 @@
 # godot-ai-mcp — Agent Project Context
 
+开工前必读 `docs/WORKFLOW.md`(工作流唯一权威版本)。
+
 本文件是 godot-ai-mcp 的长期 Agent 上下文。所有 Agent、所有后续任务默认先阅读本文件，再阅读当前任务说明。具体任务以用户当前任务为最高优先级。
 
 ## 1. 项目定位
