@@ -3,5 +3,6 @@ import type { ToolDefinition } from "../types/index.js";
 import type { AppContext } from "../services/context.js";
 import { utilityPing } from "./utility/ping.js";
 import { utilityTaskStatus } from "./utility/taskStatus.js";
+import { runtimeGetVersion } from "./runtime/getVersion.js";
 
-export const allTools: ToolDefinition<AppContext>[] = [utilityPing, utilityTaskStatus];
+export const allTools: ToolDefinition<AppContext>[] = [utilityPing, utilityTaskStatus, runtimeGetVersion];
