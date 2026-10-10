@@ -10,6 +10,7 @@ import { SceneService } from "./sceneService.js";
 import { ScriptService } from "./scriptService.js";
 import { ShaderService } from "./shaderService.js";
 import { StatusService } from "./statusService.js";
+import { RuntimeService } from "./runtimeService.js";
 
 /** 应用上下文:传给每个 Tool handler。新增 Service 在这里挂载。 */
 export interface AppContext {
@@ -33,22 +34,27 @@ export interface AppContext {
   shader: ShaderService;
   /** .gd 脚本读取与安全更新。 */
   script: ScriptService;
+  /** Godot CLI 运行器:启动项目 / 运行场景 / 导出构建(受控进程 + 互斥队列)。 */
+  runtime: RuntimeService;
 }
 
 export function createAppContext(logger: Logger, project: ProjectResolver = new ProjectResolver()): AppContext {
   const locks = new LockManager();
+  const runQueue = new TaskQueue(locks);
+  const godot = new GodotCliService();
   return {
     logger,
     locks,
-    runQueue: new TaskQueue(locks),
+    runQueue,
     status: new StatusService(locks),
     project,
-    godot: new GodotCliService(),
+    godot,
     file: new FileService(project),
     scene: new SceneService(),
     resource: new ResourceService(),
     projectConfig: new ProjectService(),
     shader: new ShaderService(),
     script: new ScriptService(),
+    runtime: new RuntimeService({ godot, project, runQueue }),
   };
 }

@@ -55,7 +55,7 @@ test("minimal real tools through the composition root", async () => {
   assert.deepEqual(h.listTools().map((x) => x.name).sort(), [
     "project_get_config", "project_set_config",
     "resource_add_or_update_external", "resource_get_info", "resource_update_property",
-    "runtime_get_version",
+    "runtime_export_project", "runtime_get_version", "runtime_run_project", "runtime_run_scene",
     "scene_get_tree", "scene_remove_node", "scene_update_node_property",
     "script_get_info", "script_update_export_default",
     "shader_get_info", "shader_update_uniform_default",

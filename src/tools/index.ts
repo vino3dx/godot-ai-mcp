@@ -4,6 +4,9 @@ import type { AppContext } from "../services/context.js";
 import { utilityPing } from "./utility/ping.js";
 import { utilityTaskStatus } from "./utility/taskStatus.js";
 import { runtimeGetVersion } from "./runtime/getVersion.js";
+import { runtimeRunProject } from "./runtime/runProject.js";
+import { runtimeRunScene } from "./runtime/runScene.js";
+import { runtimeExportProject } from "./runtime/exportProject.js";
 import { sceneGetTree } from "./scene/getTree.js";
 import { sceneUpdateNodeProperty } from "./scene/updateNodeProperty.js";
 import { sceneRemoveNode } from "./scene/removeNode.js";
@@ -21,6 +24,9 @@ export const allTools: ToolDefinition<AppContext>[] = [
   utilityPing,
   utilityTaskStatus,
   runtimeGetVersion,
+  runtimeRunProject,
+  runtimeRunScene,
+  runtimeExportProject,
   sceneGetTree,
   sceneUpdateNodeProperty,
   sceneRemoveNode,
