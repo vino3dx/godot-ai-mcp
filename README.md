@@ -89,7 +89,9 @@ Add the following to your AI client’s MCP config (e.g. `.cursor/mcp.json`):
 }
 ```
 
-> Replace the paths with your local absolute paths.
+> **⚠️ Note**: Please replace the path with the actual absolute path on your local machine.
+
+> **🔴 Recommended**: Using the console version of Godot is recommended, as it significantly improves AI operational efficiency.
 
 ### Architecture & Documentation
 
@@ -179,7 +181,9 @@ node dist/src/dev-cli.js call utility_ping '{"echo":"heartbeat"}'
 }
 ```
 
-> 请将路径替换为你本机的实际绝对路径。
+> **⚠️ 注意**：请将路径替换为你本机的实际绝对路径。
+
+> **🔴 推荐**：建议使用控制台（Console）版本的 Godot，能显著提升 AI 操作效率。
 
 ### 项目架构与文档
 
