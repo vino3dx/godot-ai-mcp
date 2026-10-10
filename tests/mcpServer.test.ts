@@ -60,7 +60,12 @@ test("real MCP client (2025-era handshake): tools/list carries JSON Schema, unif
 
   // --- tools/list:验证 JSON Schema 真的上了线(这是旧占位适配层做不到的) ---
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((x) => x.name).sort(), ["runtime_get_version", "utility_ping", "utility_task_status"]);
+  assert.deepEqual(tools.map((x) => x.name).sort(), [
+    "resource_add_or_update_external", "resource_get_info", "resource_update_property",
+    "runtime_get_version",
+    "scene_get_tree", "scene_remove_node", "scene_update_node_property",
+    "utility_ping", "utility_task_status",
+  ]);
 
   const ping = tools.find((x) => x.name === "utility_ping");
   assert.ok(ping, "utility_ping must be advertised");
@@ -107,7 +112,12 @@ test("real MCP client (modern 2026-07-28 era): server/discover path works too", 
 
   assert.equal(client.getProtocolEra(), "modern");
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((x) => x.name).sort(), ["runtime_get_version", "utility_ping", "utility_task_status"]);
+  assert.deepEqual(tools.map((x) => x.name).sort(), [
+    "resource_add_or_update_external", "resource_get_info", "resource_update_property",
+    "runtime_get_version",
+    "scene_get_tree", "scene_remove_node", "scene_update_node_property",
+    "utility_ping", "utility_task_status",
+  ]);
 
   const ok = await client.callTool({ name: "utility_ping", arguments: { echo: "modern" } });
   assert.equal((JSON.parse(textOf(ok)) as { data: { echo: string } }).data.echo, "modern");
