@@ -42,12 +42,34 @@ test("warnings are non-fatal hints, passed through to the result and the MCP con
   const w = await h.callTool("utility_warn", { x: 1 });
   assert.deepEqual(w, { ok: true, data: { n: 1 }, warnings: ["EDITOR_CONFLICT_WARNING: scene is open in the editor"] });
   const block = toMcpContent(w).content[0];
-  assert.ok(block);
-  assert.equal(JSON.parse(block.text).warnings[0].startsWith("EDITOR_CONFLICT_WARNING"), true);
+  assert.ok(block && block.type === "text");
+  if (block.type === "text") {
+    assert.equal(JSON.parse(block.text).warnings[0].startsWith("EDITOR_CONFLICT_WARNING"), true);
+  }
   assert.equal(toMcpContent(w).isError, undefined);
 
   // 空数组不制造噪音
   assert.deepEqual(await h.callTool("utility_nowarn", { x: 1 }), { ok: true, data: { n: 1 } });
+});
+
+test("image is emitted as a second MCP content block and kept out of the text JSON", async () => {
+  const reg = new ToolRegistry().registerAll([
+    t("utility_img", async () => ({ data: { n: 1 }, image: { data: "AAAA", mimeType: "image/png" } })),
+  ]);
+  const h = new ToolHost(reg, {}, quiet);
+  const r = await h.callTool("utility_img", { x: 1 });
+  assert.ok(r.ok);
+  const mc = toMcpContent(r);
+  assert.equal(mc.content.length, 2);
+  const text = mc.content[0];
+  const img = mc.content[1];
+  assert.ok(text && text.type === "text");
+  assert.ok(img && img.type === "image");
+  if (text.type === "text") assert.equal(JSON.parse(text.text).image, undefined);
+  if (img.type === "image") {
+    assert.equal(img.data, "AAAA");
+    assert.equal(img.mimeType, "image/png");
+  }
 });
 
 test("minimal real tools through the composition root", async () => {
@@ -55,7 +77,7 @@ test("minimal real tools through the composition root", async () => {
   assert.deepEqual(h.listTools().map((x) => x.name).sort(), [
     "project_get_config", "project_set_config",
     "resource_add_or_update_external", "resource_get_info", "resource_update_property",
-    "runtime_export_project", "runtime_get_version", "runtime_run_project", "runtime_run_scene",
+    "runtime_capture_screenshot", "runtime_export_project", "runtime_get_version", "runtime_run_project", "runtime_run_scene",
     "scene_get_tree", "scene_remove_node", "scene_update_node_property",
     "script_get_info", "script_update_export_default",
     "shader_get_info", "shader_update_uniform_default",

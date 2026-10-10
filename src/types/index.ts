@@ -36,14 +36,21 @@ export interface Logger {
 }
 
 /**
+ * 内联图片内容块(base64 + mimeType)。由 mcp 层转成 MCP image 内容块
+ * ({ type: "image", data, mimeType }),不随 text 块序列化。
+ */
+export interface ImageContent { data: string; mimeType: string }
+
+/**
  * 工具处理函数的返回(成功时)。失败一律 throw GodotMcpError。
  * warnings:非致命提示(例如 EDITOR_CONFLICT_WARNING),走这里而不是错误。
+ * image:可选的图片内容块(例如截图工具),由 mcp 层作为第二个 content block 输出。
  */
-export interface ToolOutput { data: unknown; message?: string; warnings?: string[] }
+export interface ToolOutput { data: unknown; message?: string; warnings?: string[]; image?: ImageContent }
 
 /** 统一的工具执行结果(ToolHost 产出)。 */
 export type ToolResult =
-  | { ok: true; data: unknown; message?: string; warnings?: string[] }
+  | { ok: true; data: unknown; message?: string; warnings?: string[]; image?: ImageContent }
   | { ok: false; error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };
 
 export interface ToolAnnotations { readOnly: boolean; destructive?: boolean; idempotent?: boolean }

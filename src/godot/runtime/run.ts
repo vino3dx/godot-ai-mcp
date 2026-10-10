@@ -62,7 +62,7 @@ export interface ExportMode {
 }
 
 /**
- * 运行时适配器会发出的全部 Godot CLI 标志(buildRunArgs / buildExportArgs 并集)。
+ * 运行时适配器会发出的全部 Godot CLI 标志(buildRunArgs / buildExportArgs / buildScreenshotArgs 并集)。
  * 单一事实来源:新增/删除标志时同步此表;tests/runtime.real.test.ts 据此断言每个标志
  * 都出现在 tests/fixtures/godot-help.txt(由真实 `godot --help` 生成,见 T4.5)。
  */
@@ -71,6 +71,7 @@ export const RUNTIME_FLAGS: readonly string[] = [
   "--headless",
   "--quit",
   "--scene",
+  "--script",
   "--export-release",
   "--export-debug",
 ];
