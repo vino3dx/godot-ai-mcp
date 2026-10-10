@@ -4,8 +4,11 @@ import { ProjectResolver } from "../core/project/projectResolver.js";
 import type { Logger } from "../types/index.js";
 import { FileService } from "./fileService.js";
 import { GodotCliService } from "./godotCli.js";
+import { ProjectService } from "./projectService.js";
 import { ResourceService } from "./resourceService.js";
 import { SceneService } from "./sceneService.js";
+import { ScriptService } from "./scriptService.js";
+import { ShaderService } from "./shaderService.js";
 import { StatusService } from "./statusService.js";
 
 /** 应用上下文:传给每个 Tool handler。新增 Service 在这里挂载。 */
@@ -24,6 +27,12 @@ export interface AppContext {
   scene: SceneService;
   /** 资源依赖与子资源管理。 */
   resource: ResourceService;
+  /** project.godot 配置读取与无损修改。 */
+  projectConfig: ProjectService;
+  /** .gdshader 读取与安全更新。 */
+  shader: ShaderService;
+  /** .gd 脚本读取与安全更新。 */
+  script: ScriptService;
 }
 
 export function createAppContext(logger: Logger, project: ProjectResolver = new ProjectResolver()): AppContext {
@@ -38,5 +47,8 @@ export function createAppContext(logger: Logger, project: ProjectResolver = new 
     file: new FileService(project),
     scene: new SceneService(),
     resource: new ResourceService(),
+    projectConfig: new ProjectService(),
+    shader: new ShaderService(),
+    script: new ScriptService(),
   };
 }

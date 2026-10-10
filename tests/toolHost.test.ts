@@ -53,9 +53,12 @@ test("warnings are non-fatal hints, passed through to the result and the MCP con
 test("minimal real tools through the composition root", async () => {
   const h = buildHost(quiet);
   assert.deepEqual(h.listTools().map((x) => x.name).sort(), [
+    "project_get_config", "project_set_config",
     "resource_add_or_update_external", "resource_get_info", "resource_update_property",
     "runtime_get_version",
     "scene_get_tree", "scene_remove_node", "scene_update_node_property",
+    "script_get_info", "script_update_export_default",
+    "shader_get_info", "shader_update_uniform_default",
     "utility_ping", "utility_task_status",
   ]);
   const ping = await h.callTool("utility_ping", { echo: "hi" });

@@ -10,6 +10,12 @@ import { sceneRemoveNode } from "./scene/removeNode.js";
 import { resourceGetInfo } from "./resource/getInfo.js";
 import { resourceUpdateProperty } from "./resource/updateProperty.js";
 import { resourceAddOrUpdateExternal } from "./resource/addOrUpdateExternal.js";
+import { projectGetConfig } from "./project/getConfig.js";
+import { projectSetConfig } from "./project/setConfig.js";
+import { shaderGetInfo } from "./shader/getInfo.js";
+import { shaderUpdateUniformDefault } from "./shader/updateUniformDefault.js";
+import { scriptGetInfo } from "./script/getInfo.js";
+import { scriptUpdateExportDefault } from "./script/updateExportDefault.js";
 
 export const allTools: ToolDefinition<AppContext>[] = [
   utilityPing,
@@ -21,4 +27,10 @@ export const allTools: ToolDefinition<AppContext>[] = [
   resourceGetInfo,
   resourceUpdateProperty,
   resourceAddOrUpdateExternal,
+  projectGetConfig,
+  projectSetConfig,
+  shaderGetInfo,
+  shaderUpdateUniformDefault,
+  scriptGetInfo,
+  scriptUpdateExportDefault,
 ];
