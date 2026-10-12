@@ -20,6 +20,12 @@ export interface RunProcessOptions {
   timeoutMs: number;
   /** 外部中止信号(例如 TaskQueue 的互斥取消)。已中止则立即杀进程。 */
   signal?: AbortSignal;
+  /**
+   * 子进程工作目录;缺省继承本进程 cwd。
+   * 存在的原因:`--dump-extension-api` 把 extension_api.json 写到**进程 cwd**(4.6.3 `--help` 原文
+   * «in the current folder»),调用方需要把产物定向到缓存目录。
+   */
+  cwd?: string;
 }
 
 export interface RunProcessResult {
@@ -62,7 +68,8 @@ export interface ExportMode {
 }
 
 /**
- * 运行时适配器会发出的全部 Godot CLI 标志(buildRunArgs / buildExportArgs / buildScreenshotArgs 并集)。
+ * godot 层会发出的全部 Godot CLI 标志(buildRunArgs / buildExportArgs / buildScreenshotArgs /
+ * buildDumpExtensionApiArgs 的并集)。
  * 单一事实来源:新增/删除标志时同步此表;tests/runtime.real.test.ts 据此断言每个标志
  * 都出现在 tests/fixtures/godot-help.txt(由真实 `godot --help` 生成,见 T4.5)。
  */
@@ -74,6 +81,8 @@ export const RUNTIME_FLAGS: readonly string[] = [
   "--script",
   "--export-release",
   "--export-debug",
+  // ClassDB 快照导出(见 src/godot/api/extensionApi.ts;godot-help.txt:122)
+  "--dump-extension-api",
 ];
 
 /**
@@ -112,7 +121,11 @@ export function defaultRunRunner(
     const start = Date.now();
     let child: ChildProcess;
     try {
-      child = spawn(file, args as string[], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+      child = spawn(file, args as string[], {
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+        ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }),
+      });
     } catch (e) {
       reject(e);
       return;
