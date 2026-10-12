@@ -36,21 +36,48 @@ Runtime Adapter only calls Godot CLI when engine-dependent capabilities are requ
 
 ### Install from npm (recommended)
 
+Requires Node.js >= 22.
+
+Install into your project:
+
 ```bash
-# Requires Node.js >= 22 (see "engines" in package.json)
+npm i vinofx-godot-ai-mcp
+```
+
+Expected output:
+
+```text
+$ npm i vinofx-godot-ai-mcp
+
+added 1 package, and audited 19 packages in 3s
+
+2 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+```
+
+Package names, counts and timings vary by environment. As long as there is no error, the installation succeeded.
+
+Install globally to get the `godot-ai-mcp` command on your PATH:
+
+```bash
+npm i -g vinofx-godot-ai-mcp
+```
+
+Run it once without installing anything:
+
+```bash
 npx -y vinofx-godot-ai-mcp
-
-# or install globally, which provides the `godot-ai-mcp` command
-npm install -g vinofx-godot-ai-mcp
 ```
 
-`npx` fetches the published package on demand — **no clone, no build, no Godot editor**. The command starts a **stdio MCP server**: it logs
+That last command starts a **stdio MCP server**. It logs
 
-```
+```text
 [godot-ai-mcp] INFO MCP server "godot-ai-mcp@1.0.0" listening on stdio, 19 tools exposed
 ```
 
-to stderr, then waits for JSON-RPC on stdin (Ctrl+C to quit). You normally never run it by hand — your AI client launches it.
+to stderr, then waits for JSON-RPC on stdin (Ctrl+C to quit). You normally never run it by hand — your AI client launches it after the configuration below.
 
 ### MCP Client Configuration (npm)
 
@@ -190,21 +217,48 @@ MCP Layer → Tool Layer → Service Layer → Core/Parser → FileSystem
 
 ### 从 npm 安装（推荐）
 
+需要 Node.js >= 22。
+
+安装到当前项目：
+
 ```bash
-# 需要 Node.js >= 22（见 package.json 的 engines 字段）
+npm i vinofx-godot-ai-mcp
+```
+
+预期输出：
+
+```text
+$ npm i vinofx-godot-ai-mcp
+
+added 1 package, and audited 19 packages in 3s
+
+2 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+```
+
+包名、数量与耗时随环境不同。只要没有报错，即表示安装成功。
+
+全局安装后，可在任意位置直接使用 `godot-ai-mcp` 命令：
+
+```bash
+npm i -g vinofx-godot-ai-mcp
+```
+
+不安装、直接运行一次：
+
+```bash
 npx -y vinofx-godot-ai-mcp
-
-# 或全局安装，会提供 `godot-ai-mcp` 命令
-npm install -g vinofx-godot-ai-mcp
 ```
 
-`npx` 会按需拉取已发布的包 —— **不需要克隆源码、不需要编译、不需要打开 Godot 编辑器**。该命令启动的是一个 **stdio MCP 服务**：它会先在 stderr 输出
+最后这条命令会启动一个 **stdio MCP 服务**，它先输出
 
-```
+```text
 [godot-ai-mcp] INFO MCP server "godot-ai-mcp@1.0.0" listening on stdio, 19 tools exposed
 ```
 
-然后等待 stdin 上的 JSON-RPC 消息（Ctrl+C 退出）。通常你不需要手动运行它 —— AI 客户端会自己拉起。
+然后等待 stdin 上的 JSON-RPC 消息（Ctrl+C 退出）。通常你不需要手动运行它 —— AI 客户端在完成下面的配置后会自己拉起。
 
 ### 在 AI 客户端中配置（npm）
 
