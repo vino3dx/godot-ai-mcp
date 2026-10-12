@@ -425,13 +425,19 @@ export class SceneService {
       });
     }
     const eol = newlineOf(ast);
-    // flags=0 时不写该属性,与 tests/fixtures 里引擎写出的 connection 段一致(该行为未经 4.6.3 实测)
+    // flags 落盘规则 —— 4.6.3 实测(见 tests/sceneWriteTools.real.test.ts):
+    //   加载 .tscn 的 [connection] 时引擎会并上 CONNECT_PERSIST(2)|CONNECT_INHERITED(32);
+    //   引擎保存时 f = flags & ~32,且仅当 f & ~2 != 0 才写出 `flags=f`。
+    // 按同一规则落盘(先并上隐含的 PERSIST,再看除 PERSIST 外是否还有位),我们写出的文本
+    // 就是引擎 save 的不动点;PERSIST 是 .tscn 连接的隐含义,不必也不该由调用方显式提供。
+    const persisted = flags | CONNECT_PERSIST;
+    const written = (persisted & ~CONNECT_PERSIST) !== 0 ? persisted : 0;
     const attributes: GodotResourceAttribute[] = [
       { name: "signal", value: quote(signal) },
       { name: "from", value: quote(from) },
       { name: "to", value: quote(to) },
       { name: "method", value: quote(method) },
-      ...(flags === 0 ? [] : [{ name: "flags", value: String(flags) }]),
+      ...(written === 0 ? [] : [{ name: "flags", value: String(written) }]),
     ];
     ast.sections.splice(connectionInsertIndex(ast), 0, {
       kind: "section",
@@ -440,9 +446,10 @@ export class SceneService {
       headerRaw: headerLine("connection", attributes),
       headerEol: eol,
       attributes,
-      body: [{ kind: "blank", raw: "", eol }],
+      // 连接的段体为空:4.6.3 引擎写出的 connection 段之间没有空行(节点段才有)
+      body: [],
     });
-    return { text: serializeGodotResource(ast), flags };
+    return { text: serializeGodotResource(ast), flags: written };
   }
 
   /** 断开信号:删除匹配的 `[connection ...]` 段;没有该连接时原样返回(removed=false,不报错)。 */
@@ -624,6 +631,9 @@ function assertIdentifier(value: unknown, param: string): string {
   }
   return value;
 }
+
+/** `Object.CONNECT_PERSIST`:连接写进 .tscn 的隐含义,由本服务补上而不是要求调用方传。 */
+const CONNECT_PERSIST = 2;
 
 /** flags 位掩码:CONNECT_DEFERRED=1 / CONNECT_PERSIST=2 / CONNECT_ONE_SHOT=4。 */
 function assertFlags(value: unknown): number {
@@ -813,7 +823,7 @@ function ensurePackedSceneExtResource(ast: GodotResourceAST, resPath: string): s
     { name: "path", value: quote(resPath) },
     { name: "id", value: quote(id) },
   ];
-  ast.sections.splice(extInsertIndex(ast), 0, {
+  insertSectionAfterTrailingBlanks(ast, extInsertIndex(ast), {
     kind: "section",
     tag: "ext_resource",
     tagName: "ext_resource",
@@ -823,6 +833,21 @@ function ensurePackedSceneExtResource(ast: GodotResourceAST, resPath: string): s
     body: [{ kind: "blank", raw: "", eol }],
   });
   return id;
+}
+
+/**
+ * 在 index 处插入段落,并把前一段的尾随空行挪到新段之后。
+ * 否则 ext_resource 块会被自身尾随空行从中间断开(实测 4.6.3:引擎写出的 ext_resource 块是连续的),
+ * 空行总数不变,只是位置后移到新段之后。
+ */
+function insertSectionAfterTrailingBlanks(ast: GodotResourceAST, index: number, section: GodotResourceSection): void {
+  const prev = ast.sections[index - 1];
+  const moved: GodotResourceBodyEntry[] = [];
+  while (prev && prev.body.length > 0 && prev.body[prev.body.length - 1]!.kind === "blank") {
+    moved.unshift(prev.body.pop()!);
+  }
+  if (moved.length > 0) section.body = moved;
+  ast.sections.splice(index, 0, section);
 }
 
 /** 匹配 signal/from/to/method 四要素的连接段;没有则 undefined。 */

@@ -7,7 +7,7 @@ export const sceneConnectSignal: ToolDefinition<AppContext> = {
   description:
     "Connect a signal in a .tscn scene by writing a persisted [connection] section (lossless; the section is appended after the existing nodes/connections). " +
     "Both nodes must exist in the same scene. An identical signal/from/to/method connection is reported as a duplicate error. " +
-    "flags is a bit mask (CONNECT_DEFERRED=1, CONNECT_PERSIST=2, CONNECT_ONE_SHOT=4); 0/omitted writes no flags= field.",
+    "flags is a bit mask (CONNECT_DEFERRED=1, CONNECT_PERSIST=2, CONNECT_ONE_SHOT=4). CONNECT_PERSIST is implied for connections stored in a .tscn, so only the other bits (1|4|8|...) make a flags= field appear (verified against Godot 4.6.3).",
   inputSchema: {
     type: "object",
     required: ["path", "sourcePath", "signal", "targetPath", "method"],
@@ -17,7 +17,7 @@ export const sceneConnectSignal: ToolDefinition<AppContext> = {
       signal: { type: "string", description: "Signal name (Godot identifier, e.g. 'ready', 'pressed')." },
       targetPath: { type: "string", description: "Node that receives the call ('.' = scene root)." },
       method: { type: "string", description: "Method name on the target node (Godot identifier)." },
-      flags: { type: "integer", minimum: 0, description: "Connection flag bit mask: CONNECT_DEFERRED=1, CONNECT_PERSIST=2, CONNECT_ONE_SHOT=4 (0 = omit the field)." },
+      flags: { type: "integer", minimum: 0, description: "Connection flag bit mask: CONNECT_DEFERRED=1, CONNECT_PERSIST=2, CONNECT_ONE_SHOT=4. CONNECT_PERSIST is implied in a .tscn, so 1 is written as flags=3 and 0 writes no flags= field." },
       dryRun: { type: "boolean", description: "Compute the diff without writing." },
       expectedHash: { type: "string", description: "Current file sha256; mismatch raises FILE_CHANGED." },
       projectPath: { type: "string", description: "Project root override." },

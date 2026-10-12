@@ -1,0 +1,32 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/root.gd" id="1_a6ejd"]
+[ext_resource type="Script" path="res://scripts/player.gd" id="2_2qipq"]
+[ext_resource type="PackedScene" path="res://scenes/child.tscn" id="3_m8vhb"]
+
+[node name="Root" type="Node2D" unique_id=1393736819]
+script = ExtResource("1_a6ejd")
+
+[node name="Player" type="CharacterBody2D" parent="." unique_id=158264583 groups=["t6_a", "t6_b"]]
+script = ExtResource("2_2qipq")
+
+[node name="Sprite" type="Sprite2D" parent="Player" unique_id=1018953932]
+
+[node name="Holder" type="Node2D" parent="Player" unique_id=1400182732]
+
+[node name="Mark" type="Marker2D" parent="Player/Holder" unique_id=279676086]
+position = Vector2(1, 2)
+
+[node name="Level" type="Node2D" parent="." unique_id=359183599 groups=["t6_a"]]
+position = Vector2(16, 32)
+
+[node name="Child" type="Node2D" parent="Level" unique_id=1819588303 instance=ExtResource("3_m8vhb")]
+
+[node name="Scripted" type="CharacterBody2D" parent="." unique_id=1922924298]
+script = ExtResource("2_2qipq")
+
+[connection signal="ready" from="Player" to="." method="_on_ready"]
+[connection signal="tree_exited" from="Player" to="." method="_on_ready"]
+[connection signal="tree_exiting" from="Player" to="." method="_on_ready" flags=3]
+[connection signal="visibility_changed" from="Player" to="." method="_on_ready" flags=3]
+[connection signal="tree_exited" from="Level" to="." method="_on_ready" flags=6]

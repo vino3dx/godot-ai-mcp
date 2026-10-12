@@ -203,13 +203,13 @@ test("scene_instantiate_scene: 正常路径 — 写 ext_resource + instance 引�
     path: "res://scenes/main.tscn", parentPath: ".", instanceScenePath: "res://scenes/child.tscn",
   }));
   assert.equal(r["nodePath"], "Child");
-  assert.equal(r["instanceId"], "2_mcp");
+  assert.equal(r["instanceId"], "3_mcp");
   assert.equal(r["instancePath"], "res://scenes/child.tscn");
 
   const text = read(dir, "scenes/main.tscn");
   assertLossless(text);
-  assert.ok(text.includes('[ext_resource type="PackedScene" path="res://scenes/child.tscn" id="2_mcp"]'));
-  assert.ok(text.includes('[node name="Child" type="Node2D" parent="." instance=ExtResource("2_mcp")]'));
+  assert.ok(text.includes('[ext_resource type="PackedScene" path="res://scenes/child.tscn" id="3_mcp"]'));
+  assert.ok(text.includes('[node name="Child" type="Node2D" parent="." instance=ExtResource("3_mcp")]'));
 
   const paths = await nodePaths(host);
   assert.ok(paths.includes("Child"));

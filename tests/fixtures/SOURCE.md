@@ -42,7 +42,7 @@ Godot_v4.6.3-stable_win64_console.exe --headless --path <sample_project> --impor
 ## 三、当前覆盖范围
 
 - **project.godot**：header 注释、`[application]`（name/description/main_scene/features）、`[autoload]`、`[input]`（含 `Object(InputEventKey,...)` 多行值）、`[layer_names]`。
-- **main.tscn**：多节点类型（Node3D / Camera3D / DirectionalLight3D / MeshInstance3D / Area3D / CollisionShape3D / Timer）；3 个 `ext_resource`（脚本 ×2、被实例化子场景 ×1）；3 个 `sub_resource`；`[connection]` 信号连接；`groups`；`unique_name_in_owner`；子场景实例（`instance=ExtResource`）；`NodePath` / `PackedStringArray` / `PackedVector3Array` / `Array` / `Dictionary` / `Color` / `Vector2` / `Vector3` / `Transform3D`。
+- **main.tscn**：多节点类型（Node3D / Camera3D / DirectionalLight3D / MeshInstance3D / Area3D / CollisionShape3D / Timer）；3 个 `ext_resource`（脚本 ×2、被实例化子场景 ×1）；3 个 `sub_resource`；`[connection]` 信号连接；**本文件实测不含 `groups=`（原描述有误，2026-10-12 更正）**；`unique_name_in_owner`；子场景实例（`instance=ExtResource`）；`NodePath` / `PackedStringArray` / `PackedVector3Array` / `Array` / `Dictionary` / `Color` / `Vector2` / `Vector3` / `Transform3D`。
 - **child.tscn**：脚本挂载 + 子资源引用。
 - **.tres**：`ShaderMaterial`（引用 `.gdshader`，含 `shader_parameter/*`，含值为 `null` 的参数）与 `StandardMaterial3D`。
 - **.gdshader**：`shader_type` / `render_mode` / 多种 `uniform` 与 hint。
@@ -61,3 +61,14 @@ Godot_v4.6.3-stable_win64_console.exe --headless --path <sample_project> --impor
 ## 五、可复现性
 
 删除 `.godot/` 后重跑 `--import` 可重建导入缓存；样例文件本身由引擎确定性写出，但 `unique_id` / `.uid` 每次生成会不同。
+
+## 六、T6.5 实测结论（真实 Godot 4.6.3，2026-10-12）
+
+验证脚本 `tests/fixtures/t6_verify.gd`，判定用例 `tests/sceneWriteTools.real.test.ts`；引擎 save 出的对照样例如 `tests/fixtures/t6_engine_saved.tscn`。
+
+- 引擎加载 `.tscn` 的 `[connection]` 时会并入 `CONNECT_PERSIST(2) | CONNECT_INHERITED(32)`，因此 `flags=` 读回 = 写入值 `| 34`（0→34、1→35、3→35、4→38、7→39）。
+- 引擎保存时 `f = flags & ~32`，且**仅当 `f & ~2 != 0`** 才写出 `flags=f`（34→省略、35→3、38→6、39→7）；仓库据此让写入成为引擎 save 的不动点。
+- `[connection]` 段之间**没有空行**（只有 `[node]` 段带尾随空行）；`ext_resource` 块连续、没有块内空行。
+- `ext_resource` **不写 `uid=`**（运行时 `ResourceSaver` 亦然；只有编辑器保存才写）。
+- 新节点不写 `unique_id=` 也能加载，引擎 save 时自行补上。
+- 未验证项（不追）：`binds=`/`unbinds=` 与带参连接、`index=` 兄弟序重排、A→B→A 深层循环实例化、`keepGlobalTransform`、`%unique_name_in_owner`、编辑器保存路径的 `uid=`、`script_create` 生成 `.gd` 的 `.uid` 补写、多行属性值经引擎往返。
