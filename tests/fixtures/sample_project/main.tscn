@@ -1,0 +1,55 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://main.gd" id="1_h2yge"]
+[ext_resource type="PackedScene" path="res://child.tscn" id="2_1bvp3"]
+[ext_resource type="Script" path="res://child.gd" id="3_lquwl"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7mycd"]
+albedo_color = Color(0.9, 0.1, 0.1, 1)
+metallic = 0.3
+roughness = 0.6
+
+[sub_resource type="BoxMesh" id="BoxMesh_272bh"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_5vw27"]
+size = Vector3(2, 2, 2)
+
+[node name="Main" type="Node3D" unique_id=1948890679]
+script = ExtResource("1_h2yge")
+speed = 3.25
+tint = Color(0.1, 0.8, 0.3, 1)
+size_2d = Vector2(128, 64)
+spawn_offset = Vector3(0, 2, -1)
+target_path = NodePath("ChildInstance")
+tags = PackedStringArray("alpha", "beta", "gamma")
+points = PackedVector3Array(1, 2, 3, 4, 5, 6)
+
+[node name="Camera" type="Camera3D" parent="." unique_id=454140126]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 4)
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=375556353]
+transform = Transform3D(0.86602527, -0.3535535, 0.35355362, 0, 0.7071069, 0.70710665, -0.50000024, -0.6123722, 0.61237246, 0, 0, 0)
+shadow_enabled = true
+
+[node name="Body" type="MeshInstance3D" parent="." unique_id=581694646]
+material_override = SubResource("StandardMaterial3D_7mycd")
+mesh = SubResource("BoxMesh_272bh")
+
+[node name="Trigger" type="Area3D" parent="." unique_id=1443783314]
+
+[node name="TriggerShape" type="CollisionShape3D" parent="Trigger" unique_id=1972273975]
+shape = SubResource("BoxShape3D_5vw27")
+
+[node name="Cooldown" type="Timer" parent="." unique_id=1927936151]
+wait_time = 1.5
+one_shot = true
+
+[node name="SpawnPoint" type="Node3D" parent="." unique_id=712606434]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+
+[node name="ChildInstance" type="Node3D" parent="." unique_id=403792959 instance=ExtResource("2_1bvp3")]
+script = ExtResource("3_lquwl")
+hp = 25
+
+[connection signal="hit" from="ChildInstance" to="." method="on_child_hit"]

@@ -1,0 +1,12 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://sample.gdshader" id="1_yj07x"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_yj07x")
+shader_parameter/albedo_color = Color(0.2, 0.4, 0.8, 1)
+shader_parameter/roughness_value = 0.7
+shader_parameter/metallic_value = null
+shader_parameter/uv_scale = null
+shader_parameter/use_detail = null
