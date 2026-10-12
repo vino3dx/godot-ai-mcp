@@ -3,6 +3,7 @@ import { TaskQueue } from "../core/concurrency/taskQueue.js";
 import { ProjectResolver } from "../core/project/projectResolver.js";
 import type { Logger } from "../types/index.js";
 import { FileService } from "./fileService.js";
+import { GodotApiService } from "./godotApiService.js";
 import { GodotCliService } from "./godotCli.js";
 import { ProjectService } from "./projectService.js";
 import { ResourceService } from "./resourceService.js";
@@ -22,6 +23,8 @@ export interface AppContext {
   project: ProjectResolver;
   /** Godot CLI 探测(定位可执行文件 + 一次受控 --version)。 */
   godot: GodotCliService;
+  /** ClassDB 类元数据(引擎 dump 的 extension_api.json,按引擎版本缓存;引擎不可用时明确报错)。 */
+  godotApi: GodotApiService;
   /** 项目文件读写(tools 访问底层文件系统的唯一入口)。 */
   file: FileService;
   /** 场景树解析与无损修改。 */
@@ -49,6 +52,7 @@ export function createAppContext(logger: Logger, project: ProjectResolver = new 
     status: new StatusService(locks),
     project,
     godot,
+    godotApi: new GodotApiService({ godot, project, runQueue }),
     file: new FileService(project),
     scene: new SceneService(),
     resource: new ResourceService(),
