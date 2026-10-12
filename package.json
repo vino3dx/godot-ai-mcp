@@ -1,20 +1,48 @@
 {
-  "name": "godot-ai-mcp",
-  "version": "0.1.0",
-  "description": "Standalone MCP server for Godot 4.7.2 projects (file-based, no editor required).",
+  "name": "vinofx-godot-ai-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Godot engine AI tools",
   "type": "module",
   "bin": {
     "godot-ai-mcp": "./dist/src/index.js"
   },
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
+    "prepublishOnly": "npm test",
     "dev:call": "node dist/src/dev-cli.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vino3dx/godot-ai-mcp.git"
+  },
+  "author": "vino3dx",
   "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/vino3dx/godot-ai-mcp/issues"
+  },
+  "homepage": "https://github.com/vino3dx/godot-ai-mcp#readme",
+  "keywords": [
+    "godot",
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "gdscript",
+    "tscn",
+    "tres",
+    "godot4"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "@modelcontextprotocol/client": "^2.2.0",
     "@types/node": "^22.0.0",
