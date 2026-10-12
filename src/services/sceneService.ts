@@ -5,6 +5,9 @@
 //   - index.js:parseGodotResource / serializeGodotResource / findGodotResourceSections / getGodotSceneNodes
 //   - internal.js:scanBalance(写入前拒绝会破坏文件的属性值;括号/引号平衡语义的唯一实现处)
 // 格式依据见 src/core/parser/godotResource.ts 与 types.ts 顶部的 4.7.2 源码行号(段头属性、`name = value`)。
+//
+// 读侧(T7)除节点树外还返回 `[connection]` 列表与实例节点的覆盖属性;写入侧对**实例节点**做两条
+// 额外校验(只写当前文件的覆盖、字面量类型明显不符时报错),两条都只用文本,不依赖引擎。
 import { GodotMcpError } from "../core/errors.js";
 import { findHeaderEnd, scanBalance, skipSpace, splitArrayElements, unquote } from "../core/parser/internal.js";
 import {
@@ -42,8 +45,14 @@ export interface SceneNode {
   type?: string;
   /** 挂载脚本:解析成功的 `res://` 路径;解析不到时保留 `ExtResource("id")` 原文。 */
   script?: string;
-  /** 实例化来源:`instance=ExtResource("id")` 解析出的 `res://` 路径,解析不到时保留原文。 */
+  /** 实例化来源:`instance=ExtResource("id")` 解析出的 `res://` 路径,解析不到时保留原文(旧字段,与 instanceScene 同源)。 */
   instance?: string;
+  /** 是否为子场景实例(段头带 `instance=` 或 `instance_placeholder=`)。 */
+  isInstance: boolean;
+  /** 实例的来源场景 `res://` 路径;**只有解析得到时才出现**(解析不到时不猜,原文仍见 `instance`)。 */
+  instanceScene?: string;
+  /** 实例节点上的覆盖属性(= 段体属性原文,含 `script`);非实例节点不出现该字段。 */
+  overrides?: Array<{ name: string; value: string }>;
   uniqueId?: number;
   groups: string[];
   /** 段体属性(值已去掉 `=` 后的分隔空白)。 */
@@ -51,11 +60,38 @@ export interface SceneNode {
   children: SceneNode[];
 }
 
+/**
+ * 一条 `[connection]`(信号连接)。
+ * flags 的读回规则依据 4.6.3 实测(见 tests/fixtures/SOURCE.md 第六节):
+ * 引擎**加载** .tscn 时会并入 `CONNECT_PERSIST(2)|CONNECT_INHERITED(32)`,但**保存/写文件**时会剥掉 32。
+ * 所以这里的 `flags.raw` 是文件里的原始数字,`semantic` 只解释文件里真实出现的位,
+ * 不把引擎隐含的 INHERITED(32) 算进来 —— 读回因此与写入规则(见 connectSignal)互逆。
+ */
+export interface SceneConnectionFlags {
+  /** 文件里 `flags=` 的原始数值;文件没写该字段时为 null(不伪造 0)。 */
+  raw: number | null;
+  /** raw 里已命名的位:`DEFERRED`(1)/`PERSIST`(2)/`ONE_SHOT`(4)/`REFERENCE_COUNTED`(8)/`APPEND_SOURCE_OBJECT`(16)。 */
+  semantic: string[];
+  /** raw 里其余已置位的值(升序),例如 INHERITED 的 32;命名位不重复出现。 */
+  otherBits: number[];
+}
+
+export interface SceneConnection {
+  /** `from=` 的节点路径(场景根为 ".");与 SceneNode.path 同一套写法。 */
+  source: string;
+  signal: string;
+  target: string;
+  method: string;
+  flags: SceneConnectionFlags;
+}
+
 export interface SceneTree {
   /** 场景根节点(无 `[node]` 段时为 undefined,例如 .tres)。 */
   root?: SceneNode;
   /** 全部节点,深度优先(根在前);文件里引用不到的节点排在最后,不丢。 */
   nodes: SceneNode[];
+  /** 文件里的 `[connection]` 段,按出现顺序。 */
+  connections: SceneConnection[];
 }
 
 /** scene_add_node 的入参。 */
@@ -163,7 +199,10 @@ export interface DisconnectSignalResult {
 }
 
 export class SceneService {
-  /** 提取结构化节点树:节点名称、类型、Path、父节点、挂载脚本、分组与属性。 */
+  /**
+   * 提取结构化场景视图:节点树(名称/类型/Path/父节点/脚本/分组/属性/实例)+ `[connection]` 列表。
+   * 实例节点只报告本文件里的覆盖属性,不展开子场景内部节点(本读取器不打开其他文件)。
+   */
   getSceneTree(tscnText: string): SceneTree {
     const ast = parseGodotResource(tscnText);
     const ext = extResourcePaths(ast);
@@ -212,18 +251,30 @@ export class SceneService {
     };
     if (root) walk(root);
     for (const n of created) if (!seen.has(n)) walk(n);
-    return { root, nodes: ordered };
+    return { root, nodes: ordered, connections: readConnections(ast) };
   }
 
   /**
    * 修改(属性已存在)或新增(不存在则在段体末尾、尾随空行之前插入)节点属性。
    * 返回无损序列化后的文本:除目标行/新增行外,其余字节不变。
+   *
+   * 对**实例节点**(段头带 `instance=` / `instance_placeholder=`)的两条额外校验(T7 功能 4):
+   *   1. 只允许写"当前场景文件的覆盖";指向被实例化子场景**内部**的路径直接报错,
+   *      本服务是纯文本变换,任何情况下都不会打开/修改原子场景文件;
+   *   2. 该属性在**本节点已有覆盖值**且新旧字面量类型都能静态判定、且明显不符时报错,不静默写入。
+   *      判据只用字面量文本(不查 ClassDB、不解析 .gd 的 @export 注解,见下 inferLiteralType)。
    */
   updateNodeProperty(tscnText: string, nodePath: string, key: string, value: string): string {
     assertPropertyEntry(key, value);
 
     const ast = parseGodotResource(tscnText);
-    const section = requireNodeSection(ast, nodePath, "nodePath");
+    const target = normalizeNodePath(nodePath, "nodePath");
+    const section = findNodeSection(ast, target);
+    if (!section) {
+      const owner = instantiatedAncestorOf(ast, target);
+      throw owner ? insideInstanceError(nodePath, target, owner) : missingNodeError(target, nodePath, "nodePath");
+    }
+    if (isInstanceSection(section)) assertOverrideValueType(ast, section, key, value);
     const entry = section.body.find((e): e is GodotResourceProperty => e.kind === "property" && e.name === key);
     if (entry) {
       entry.value = `${separatorOf(entry.value)}${value}`; // 保留原行的 `=` 后空白写法
@@ -500,16 +551,28 @@ function joinNodePath(parent: string, name: string): string {
   return parent === ROOT ? name : `${parent}/${name}`;
 }
 
+/** 按规范路径找节点段(不抛错);path 需已 normalizeNodePath。 */
+function findNodeSection(ast: GodotResourceAST, path: string): GodotResourceSection | undefined {
+  for (const section of findGodotResourceSections(ast, "node")) {
+    if (nodeSectionPath(section) === path) return section;
+  }
+  return undefined;
+}
+
 /** 按路径取节点段;不存在(或没有根节点)抛 INVALID_ARGUMENT,并注明是哪个参数错的。 */
 function requireNodeSection(ast: GodotResourceAST, path: string, param: string): GodotResourceSection {
   const target = normalizeNodePath(path, param);
-  for (const section of findGodotResourceSections(ast, "node")) {
-    if (nodeSectionPath(section) === target) return section;
-  }
+  const section = findNodeSection(ast, target);
+  if (section) return section;
+  throw missingNodeError(target, path, param);
+}
+
+/** "节点不存在/没有根节点"的统一错误(带是哪个参数错的);调用方可能给出更准确的原因(如实例内部)。 */
+function missingNodeError(target: string, input: string, param: string): GodotMcpError {
   if (target === ROOT) {
-    throw new GodotMcpError("INVALID_ARGUMENT", `场景没有根节点(缺少不带 parent 的 [node] 段): ${param}`, { param, nodePath: path });
+    return new GodotMcpError("INVALID_ARGUMENT", `场景没有根节点(缺少不带 parent 的 [node] 段): ${param}`, { param, nodePath: input });
   }
-  throw new GodotMcpError("INVALID_ARGUMENT", `${param} 指向的节点不存在: ${path}`, { param, nodePath: path, normalized: target });
+  return new GodotMcpError("INVALID_ARGUMENT", `${param} 指向的节点不存在: ${input}`, { param, nodePath: input, normalized: target });
 }
 
 function isInNodeSubtree(section: GodotResourceSection, rootPath: string): boolean {
@@ -877,16 +940,23 @@ function connectionInsertIndex(ast: GodotResourceAST): number {
 }
 
 function toSceneNode(n: GodotNodeAST, ext: Map<string, string>): SceneNode {
+  const properties = n.properties.map((p) => ({ name: p.name, value: bodyValue(p) }));
+  const instanceScene = instanceSceneOf(n, ext);
   const node: SceneNode = {
     name: n.name,
     path: nodePathOf(n.name, n.parent),
-    properties: n.properties.map((p) => ({ name: p.name, value: bodyValue(p) })),
+    properties,
     groups: [...n.groups],
     children: [],
+    // 子场景实例:有 instance= 或 instance_placeholder= 即算;两种情况都不展开子场景内部节点
+    isInstance: n.instance !== undefined || n.instancePlaceholder !== undefined,
   };
   if (n.type !== undefined) node.type = n.type;
   if (n.uniqueId !== undefined) node.uniqueId = n.uniqueId;
-  if (n.instance !== undefined) node.instance = resolveExtRef(n.instance, ext) ?? n.instance;
+  if (n.instance !== undefined) node.instance = instanceScene ?? n.instance;
+  if (instanceScene !== undefined) node.instanceScene = instanceScene;
+  // 实例节点的段体属性全部是"当前场景文件的覆盖"(含 script);非实例节点不出现该字段
+  if (node.isInstance) node.overrides = properties.map((p) => ({ name: p.name, value: p.value }));
   const script = n.properties.find((p) => p.name === "script");
   if (script) {
     const raw = bodyValue(script);
@@ -969,4 +1039,184 @@ function decodeQuoted(raw: string): string {
   const t = raw.trim();
   if (t.length < 2 || t.charAt(0) !== '"' || t.charAt(t.length - 1) !== '"') return t;
   return t.slice(1, -1).replace(/\\(.)/g, "$1");
+}
+
+// ══════════════════ T7:读侧(connections / 实例节点)与实例覆盖校验 ══════════════════
+
+/**
+ * 4.6.3 实测的 `Object.ConnectFlags`(取自 `godot --headless --dump-extension-api` 的
+ * `Object.enums.ConnectFlags`):DEFERRED=1 / PERSIST=2 / ONE_SHOT=4 / REFERENCE_COUNTED=8 /
+ * APPEND_SOURCE_OBJECT=16。引擎在**加载** .tscn 时额外并入的 `CONNECT_INHERITED(32)`
+ * 不在此表里 —— 它不是文件里会出现的写法(引擎保存时按 `f = flags & ~32` 剥离)。
+ */
+const CONNECT_FLAG_NAMES: ReadonlyArray<readonly [number, string]> = [
+  [1, "DEFERRED"], [2, "PERSIST"], [4, "ONE_SHOT"], [8, "REFERENCE_COUNTED"], [16, "APPEND_SOURCE_OBJECT"],
+];
+
+/** 文件里的全部 `[connection]` 段;必填字段缺失或 flags 不是 32 位非负整数时抛 PARSE_ERROR(不静默丢连接)。 */
+function readConnections(ast: GodotResourceAST): SceneConnection[] {
+  return findGodotResourceSections(ast, "connection").map((section) => {
+    const source = attrValue(section, "from");
+    const signal = attrValue(section, "signal");
+    const target = attrValue(section, "to");
+    const method = attrValue(section, "method");
+    if (source === undefined || signal === undefined || target === undefined || method === undefined) {
+      throw new GodotMcpError("PARSE_ERROR", `[connection] 段缺少 signal/from/to/method: ${section.headerRaw.trim()}`, {
+        header: section.headerRaw, signal: signal ?? null, from: source ?? null, to: target ?? null, method: method ?? null,
+      });
+    }
+    return { source, signal, target, method, flags: parseConnectFlags(attrValue(section, "flags"), section) };
+  });
+}
+
+/** 解析一条连接的 `flags=`:raw 为文件原文数值(没写该字段时为 null),semantic/otherBits 由 raw 拆位。 */
+function parseConnectFlags(raw: string | undefined, section: GodotResourceSection): SceneConnectionFlags {
+  if (raw === undefined) return { raw: null, semantic: [], otherBits: [] }; // 文件没写 flags= 就不伪造 0
+  const t = raw.trim();
+  if (!/^\d+$/.test(t) || Number(t) > 0x7fffffff) {
+    throw new GodotMcpError("PARSE_ERROR", `[connection] 的 flags 不是 32 位非负整数: ${JSON.stringify(raw)}`, {
+      header: section.headerRaw, flags: raw,
+    });
+  }
+  const value = Number(t);
+  const semantic = CONNECT_FLAG_NAMES.filter(([bit]) => (value & bit) !== 0).map(([, name]) => name);
+  const named = CONNECT_FLAG_NAMES.reduce((mask, [bit]) => mask | bit, 0);
+  const otherBits: number[] = [];
+  for (let i = 0; i < 31; i++) {
+    const bit = 1 << i;
+    if ((value & bit) !== 0 && (named & bit) === 0) otherBits.push(bit);
+  }
+  return { raw: value, semantic, otherBits };
+}
+
+/** 该 `[node]` 段是否是子场景实例(`instance=` / `instance_placeholder=`)。 */
+function isInstanceSection(section: GodotResourceSection): boolean {
+  return section.attributes.some((a) => a.name === "instance" || a.name === "instance_placeholder");
+}
+
+/**
+ * 实例的来源场景路径(解析不到就 undefined,**不猜**)。
+ *   - `instance=ExtResource("id")` → 按本文件的 `[ext_resource path=…]` 解析;
+ *   - `instance_placeholder="res://…"` 这类直接写路径原文的写法 → 采用原文(仅当它确实以 `res://` 开头)。
+ * 注:占位实例的具体写法本仓样例未覆盖(未经 4.6.3 实测),所以这里只认"文本里明写着 res://"的情形。
+ */
+function instanceSceneOf(n: GodotNodeAST, ext: Map<string, string>): string | undefined {
+  const raw = n.instance ?? n.instancePlaceholder;
+  if (raw === undefined) return undefined;
+  const resolved = resolveExtRef(raw, ext);
+  if (resolved !== undefined) return resolved;
+  const literal = decodeQuoted(raw);
+  return literal.startsWith("res://") ? literal : undefined;
+}
+
+/**
+ * 请求路径是否落在"本文件里某个实例节点的子树"内:返回最长的那个实例祖先路径与其来源场景。
+ * 只认严格内部(`A/B` 对实例节点 `A`),实例节点自身不算 —— 那正是允许写覆盖的位置。
+ */
+function instantiatedAncestorOf(
+  ast: GodotResourceAST, path: string,
+): { nodePath: string; instanceScene?: string } | undefined {
+  const ext = extResourcePaths(ast);
+  let best: { nodePath: string; instanceScene?: string } | undefined;
+  for (const section of findGodotResourceSections(ast, "node")) {
+    if (!isInstanceSection(section)) continue;
+    const owner = nodeSectionPath(section);
+    if (owner === undefined || !path.startsWith(`${owner}/`)) continue;
+    if (best === undefined || owner.length > best.nodePath.length) {
+      const scene = resolveExtRef(attrValue(section, "instance") ?? attrValue(section, "instance_placeholder"), ext);
+      best = scene === undefined ? { nodePath: owner } : { nodePath: owner, instanceScene: scene };
+    }
+  }
+  return best;
+}
+
+/** "节点来自子场景内部"的明确错误(比裸的"节点不存在"更能说明为什么不能写)。 */
+function insideInstanceError(
+  nodePath: string, target: string, owner: { nodePath: string; instanceScene?: string },
+): GodotMcpError {
+  const scene = owner.instanceScene ?? "(来源场景路径未能从 instance= 解析出)";
+  return new GodotMcpError(
+    "INVALID_ARGUMENT",
+    `nodePath 指向的节点在被实例化的子场景内部,不在当前场景文件的覆盖范围: ${nodePath}`
+      + `(实例节点 ${owner.nodePath} ← ${scene})。本服务只改当前 .tscn 的覆盖属性,不会修改原子场景文件;`
+      + `要改子场景自身的默认值,请把 path 指向那个场景文件。`,
+    { param: "nodePath", nodePath, normalized: target, instantiatedAncestor: owner.nodePath, instanceScene: owner.instanceScene ?? null },
+  );
+}
+
+/**
+ * 实例节点覆盖写入的类型校验(**判据仅限能静态确定的字面量**)。
+ * 只在"该属性在本节点已有覆盖值"且新旧字面量类型都能判定、又明显不符时报错;新增覆盖不猜。
+ * 刻意不查 ClassDB、不解析 .gd 的 `@export` 注解 —— 写侧保持不依赖引擎(T6 起的约定)。
+ */
+function assertOverrideValueType(ast: GodotResourceAST, section: GodotResourceSection, key: string, value: string): void {
+  const entry = section.body.find((e): e is GodotResourceProperty => e.kind === "property" && e.name === key);
+  if (!entry) return;
+  const types = declaredResourceTypes(ast);
+  const existing = bodyValue(entry);
+  const before = inferLiteralType(existing, types);
+  const after = inferLiteralType(value, types);
+  if (before === undefined || after === undefined || literalTypesCompatible(before, after)) return;
+  const nodePath = nodeSectionPath(section) ?? "(未知节点)";
+  throw new GodotMcpError(
+    "INVALID_ARGUMENT",
+    `写入值的类型与该实例节点的现有覆盖不符: ${nodePath}.${key} 现为 ${existing}(类型 ${before}),`
+      + `新值 ${value} 是 ${after}。拒绝静默写入类型明显不符的值(判据只用字面量,未查 ClassDB)。`,
+    { param: "value", key, nodePath, existingValue: existing, existingType: before, newType: after, value },
+  );
+}
+
+/** 本文件的 `ExtResource("id")` / `SubResource("id")` → 类型名(取各自段头的 `type=`;两个命名空间分开)。 */
+interface DeclaredResourceTypes { ext: Map<string, string>; sub: Map<string, string> }
+
+function declaredResourceTypes(ast: GodotResourceAST): DeclaredResourceTypes {
+  const collect = (tag: "ext_resource" | "sub_resource"): Map<string, string> => {
+    const map = new Map<string, string>();
+    for (const section of findGodotResourceSections(ast, tag)) {
+      const id = attrValue(section, "id");
+      const type = attrValue(section, "type");
+      if (id !== undefined && type !== undefined) map.set(id, type);
+    }
+    return map;
+  };
+  return { ext: collect("ext_resource"), sub: collect("sub_resource") };
+}
+
+/**
+ * 静态判定一个 .tscn 属性值的类型名;**判不出返回 undefined(不猜)**。
+ * `ExtResource("id")`/`SubResource("id")` 的类型取自本文件的段头声明,解析不到 id 时同样不猜。
+ */
+function inferLiteralType(value: string, types: DeclaredResourceTypes): string | undefined {
+  const t = value.trim();
+  if (t === "") return undefined;
+  if (t === "true" || t === "false") return "bool";
+  if (t === "null") return "null";
+  if (t === "inf" || t === "-inf" || t === "nan") return "float";
+  if (/^-?\d+$/.test(t)) return "int";
+  if (/^-?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?$/.test(t)) return "float";
+  const ext = /^ExtResource\(\s*("(?:[^"\\]|\\.)*")\s*\)$/.exec(t);
+  if (ext) return types.ext.get(decodeQuoted(ext[1]!));
+  const sub = /^SubResource\(\s*("(?:[^"\\]|\\.)*")\s*\)$/.exec(t);
+  if (sub) return types.sub.get(decodeQuoted(sub[1]!));
+  if (t.startsWith("&")) return /^&"(?:[^"\\]|\\.)*"$/.test(t) ? "StringName" : undefined;
+  if (t.startsWith("^")) return /^\^"(?:[^"\\]|\\.)*"$/.test(t) ? "NodePath" : undefined;
+  if (t.startsWith('"')) return /^"(?:[^"\\]|\\.)*"$/.test(t) ? "String" : undefined;
+  if (t.startsWith("{")) return "Dictionary";
+  if (t.startsWith("[")) return "Array";
+  const typed = /^(Array|Dictionary)\s*\[/.exec(t); // `Array[NodePath]([...])` 这类带泛型的写法
+  if (typed) return typed[1];
+  const ctor = /^([A-Za-z_]\w*)\s*\(/.exec(t);     // `Vector2(…)` / `Color(…)` / `NodePath(…)` 等构造字面量
+  if (ctor) return ctor[1];
+  return undefined;
+}
+
+/** Godot 会隐式互转的类型族;`null` 视为通配(给"原本为 null"的属性补值是合法修改)。 */
+const LITERAL_TYPE_FAMILIES: ReadonlyArray<ReadonlySet<string>> = [
+  new Set(["int", "float"]),
+  new Set(["String", "StringName", "NodePath"]),
+];
+
+function literalTypesCompatible(a: string, b: string): boolean {
+  if (a === b || a === "null" || b === "null") return true;
+  return LITERAL_TYPE_FAMILIES.some((family) => family.has(a) && family.has(b));
 }
