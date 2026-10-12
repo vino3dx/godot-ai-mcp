@@ -22,3 +22,4 @@ tests/fixtures/** -text
 *.res binary
 *.scn binary
 *.zip binary
+*.fbx binary

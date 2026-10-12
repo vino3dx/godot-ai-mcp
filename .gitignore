@@ -4,3 +4,4 @@ node_modules/
 dist/
 .workbuddy/
 .godot-ai-mcp/
+.godot-ai-mcp-log/
