@@ -11,6 +11,13 @@ import { runtimeCaptureScreenshot } from "./runtime/captureScreenshot.js";
 import { sceneGetTree } from "./scene/getTree.js";
 import { sceneUpdateNodeProperty } from "./scene/updateNodeProperty.js";
 import { sceneRemoveNode } from "./scene/removeNode.js";
+import { sceneAddNode } from "./scene/addNode.js";
+import { sceneReparentNode } from "./scene/reparentNode.js";
+import { sceneAddToGroup } from "./scene/addToGroup.js";
+import { sceneRemoveFromGroup } from "./scene/removeFromGroup.js";
+import { sceneInstantiateScene } from "./scene/instantiateScene.js";
+import { sceneConnectSignal } from "./scene/connectSignal.js";
+import { sceneDisconnectSignal } from "./scene/disconnectSignal.js";
 import { resourceGetInfo } from "./resource/getInfo.js";
 import { resourceUpdateProperty } from "./resource/updateProperty.js";
 import { resourceAddOrUpdateExternal } from "./resource/addOrUpdateExternal.js";
@@ -20,6 +27,7 @@ import { shaderGetInfo } from "./shader/getInfo.js";
 import { shaderUpdateUniformDefault } from "./shader/updateUniformDefault.js";
 import { scriptGetInfo } from "./script/getInfo.js";
 import { scriptUpdateExportDefault } from "./script/updateExportDefault.js";
+import { scriptCreate } from "./script/create.js";
 
 export const allTools: ToolDefinition<AppContext>[] = [
   utilityPing,
@@ -32,6 +40,13 @@ export const allTools: ToolDefinition<AppContext>[] = [
   sceneGetTree,
   sceneUpdateNodeProperty,
   sceneRemoveNode,
+  sceneAddNode,
+  sceneReparentNode,
+  sceneAddToGroup,
+  sceneRemoveFromGroup,
+  sceneInstantiateScene,
+  sceneConnectSignal,
+  sceneDisconnectSignal,
   resourceGetInfo,
   resourceUpdateProperty,
   resourceAddOrUpdateExternal,
@@ -41,4 +56,5 @@ export const allTools: ToolDefinition<AppContext>[] = [
   shaderUpdateUniformDefault,
   scriptGetInfo,
   scriptUpdateExportDefault,
+  scriptCreate,
 ];

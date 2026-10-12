@@ -1,0 +1,10 @@
+; Minimal hand-written project used by the T6 write-tool tests.
+; Tests copy this directory to a temp dir before writing, so the repo copy stays pristine.
+; Not an engine-generated fixture: the engine-generated sample lives in tests/fixtures/sample_project.
+
+config_version=5
+
+[application]
+
+config/name="T6WriteToolsFixture"
+run/main_scene="res://scenes/main.tscn"

@@ -28,6 +28,14 @@ export interface EditResult extends WriteOutcome {
   resPath: string;
 }
 
+export interface CreateOptions {
+  /** true 允许覆盖已存在的文件;缺省 false(已存在则抛 INVALID_ARGUMENT)。 */
+  overwrite?: boolean;
+  dryRun?: boolean;
+  /** 仅 overwrite=true 时生效:磁盘上现有内容的 sha256;不匹配抛 FILE_CHANGED。 */
+  expectedHash?: string;
+}
+
 export class FileService {
   constructor(private readonly resolver: ProjectResolver) {}
 
@@ -65,5 +73,31 @@ export class FileService {
       expectedHash: opts.expectedHash ?? read.hash,
     });
     return { ...outcome, resPath: read.resPath };
+  }
+
+  /**
+   * 新建项目内文本文件(目录不存在时一并创建;内容统一 LF)。
+   * overwrite=false(默认)时文件已存在抛 INVALID_ARGUMENT;overwrite=true 时可带 expectedHash 做乐观并发。
+   * 路径越界 / `..` / `user://` 由 FileGuard 拒绝。
+   */
+  async createText(
+    projectPath: string | undefined,
+    resPath: string,
+    content: string,
+    opts: CreateOptions = {},
+  ): Promise<EditResult> {
+    const guard = this.guard(projectPath);
+    const absPath = guard.toAbsolute(resPath);
+    if (opts.overwrite !== true && fs.existsSync(absPath)) {
+      throw new GodotMcpError("INVALID_ARGUMENT", `文件已存在(overwrite=false,拒绝覆盖): ${resPath}`, {
+        path: absPath, resPath,
+      });
+    }
+    const outcome = await safeWriteFile(absPath, content, {
+      ...(opts.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
+      // 新建(overwrite=false)时文件必须不存在,expectedHash 无意义且会导致 FILE_CHANGED
+      ...(opts.overwrite === true && opts.expectedHash !== undefined ? { expectedHash: opts.expectedHash } : {}),
+    });
+    return { ...outcome, resPath: guard.toRes(absPath) };
   }
 }
