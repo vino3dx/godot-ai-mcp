@@ -183,6 +183,8 @@ Local-build client config (instead of `npx`):
 | Resource | `resource_get_info`, `resource_update_property`, `resource_add_or_update_external` |
 | Project / Shader / Script | `project_get_config`, `project_set_config`, `shader_get_info`, `shader_update_uniform_default`, `script_get_info`, `script_update_export_default` |
 
+> Tools that need authoritative class info (e.g. `scene_get_node_info`) cache the engine's ClassDB API dump under `<projectRoot>/.godot-ai-mcp/` (keyed by engine version) — add that folder to your project's `.gitignore`; the server never edits your `.gitignore`.
+
 ### Architecture & Documentation
 
 Strict unidirectional dependency:
@@ -363,6 +365,8 @@ node dist/src/dev-cli.js call utility_ping '{"echo":"heartbeat"}'
 | Scene | `scene_get_tree`、`scene_update_node_property`、`scene_remove_node` |
 | Resource | `resource_get_info`、`resource_update_property`、`resource_add_or_update_external` |
 | Project / Shader / Script | `project_get_config`、`project_set_config`、`shader_get_info`、`shader_update_uniform_default`、`script_get_info`、`script_update_export_default` |
+
+> 需要权威类信息的工具（如 `scene_get_node_info`）会把引擎导出的 ClassDB API dump 缓存到 `<被操作工程根>/.godot-ai-mcp/`（按引擎版本分键）—— 建议把该目录加进你工程的 `.gitignore`；本服务不会自动修改你的 `.gitignore`。
 
 ### 项目架构与文档
 
