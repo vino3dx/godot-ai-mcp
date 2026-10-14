@@ -5,7 +5,7 @@ export type ErrorCode =
   | "INVALID_ARGUMENT" | "TOOL_NOT_FOUND" | "FILE_NOT_FOUND" | "PARSE_ERROR"
   | "LOCK_TIMEOUT" | "TASK_TIMEOUT" | "RUNTIME_REQUIRED" | "RUNTIME_FAILED" | "INTERNAL"
   | "PROJECT_NOT_FOUND" | "RESOURCE_NOT_FOUND" | "GODOT_NOT_FOUND" | "GODOT_PROCESS_FAILED"
-  | "VALIDATION_FAILED" | "FILE_CHANGED";
+  | "VALIDATION_FAILED" | "FILE_CHANGED" | "PROTECTED_PATH";
 
 /** 最小 JSON Schema 子集(工具入参),校验器只支持这些字段,见 core/validation。 */
 export interface JsonSchema {

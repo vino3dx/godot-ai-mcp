@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import { GodotMcpError } from "../core/errors.js";
 import { FileGuard } from "../core/filesystem/fileGuard.js";
+import { assertNotProtected, assertOverwritableExtension } from "../core/filesystem/protectedPaths.js";
 import { safeWriteFile, sha256Hex, type WriteOutcome } from "../core/filesystem/safeWrite.js";
 import { ProjectResolver } from "../core/project/projectResolver.js";
 
@@ -79,6 +80,8 @@ export class FileService {
    * 新建项目内文本文件(目录不存在时一并创建;内容统一 LF)。
    * overwrite=false(默认)时文件已存在抛 INVALID_ARGUMENT;overwrite=true 时可带 expectedHash 做乐观并发。
    * 路径越界 / `..` / `user://` 由 FileGuard 拒绝。
+   * 覆盖既有文件时额外受 core/filesystem/protectedPaths 约束:受保护目录 → PROTECTED_PATH;
+   * 只有文本类扩展名可被覆盖。目录/设备等非普通文件不适用(交给 safeWrite 报错),受保护目录内新建文件允许。
    */
   async createText(
     projectPath: string | undefined,
@@ -93,11 +96,24 @@ export class FileService {
         path: absPath, resPath,
       });
     }
+    if (opts.overwrite === true && isExistingFile(absPath)) {
+      assertNotProtected(guard, absPath, "overwrite");
+      assertOverwritableExtension(guard, absPath);
+    }
     const outcome = await safeWriteFile(absPath, content, {
       ...(opts.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
       // 新建(overwrite=false)时文件必须不存在,expectedHash 无意义且会导致 FILE_CHANGED
       ...(opts.overwrite === true && opts.expectedHash !== undefined ? { expectedHash: opts.expectedHash } : {}),
     });
     return { ...outcome, resPath: guard.toRes(absPath) };
+  }
+}
+
+/** 目标是已存在的普通文件(跟随符号链接)。目录/设备/不存在的路径都返回 false。 */
+function isExistingFile(p: string): boolean {
+  try {
+    return fs.statSync(p).isFile();
+  } catch {
+    return false;
   }
 }

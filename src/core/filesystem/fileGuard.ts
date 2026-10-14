@@ -16,7 +16,8 @@ const IS_WINDOWS = process.platform === "win32";
 export class FileGuard {
   /** 规范化后的项目根(绝对路径)。 */
   readonly root: string;
-  private readonly realRoot: string;
+  /** 项目根的 realpath(符号链接已解析;路径不存在时按最近存在的祖先解析)。 */
+  readonly realRoot: string;
 
   constructor(projectRoot: string) {
     if (typeof projectRoot !== "string" || projectRoot.trim() === "") {
@@ -63,6 +64,11 @@ export class FileGuard {
     return within(this.root, path.resolve(absPath));
   }
 
+  /** 路径的真实路径(解析符号链接;junction/软链均按最终目标判定)。 */
+  realPath(absPath: string): string {
+    return realpathBestEffort(path.resolve(absPath));
+  }
+
   /** 校验在项目内(含符号链接逃逸),返回规范化绝对路径。 */
   assertInside(absPath: string, original: string = absPath): string {
     const resolved = path.resolve(absPath);
@@ -82,7 +88,7 @@ export class FileGuard {
 }
 
 /** rel === ""(自身)或落在 root 之下。Windows 下大小写不敏感。 */
-function within(root: string, target: string): boolean {
+export function within(root: string, target: string): boolean {
   const r = IS_WINDOWS ? root.toLowerCase() : root;
   const t = IS_WINDOWS ? target.toLowerCase() : target;
   const rel = path.relative(r, t);
