@@ -7,7 +7,10 @@ export const sceneAddNode: ToolDefinition<AppContext> = {
   description:
     "Add a new node to a .tscn scene (lossless: one [node] section is inserted after the parent's subtree, keeping depth-first order). " +
     "nodeType is only checked statically (must look like a class-name identifier) — ClassDB is NOT consulted, so a class that is not an instantiable Node subclass surfaces when Godot loads the scene. " +
-    "A sibling with the same name is an error unless autoRename=true.",
+    "A sibling with the same name is an error unless autoRename=true. " +
+    "Also returns created:{nodePath, type, parent, properties}: the static values written into the file for the new node " +
+    "(this tool never runs Godot — a Control's true post-layout position/size comes from runtime_inspect_ui); " +
+    "properties maps each written property name to its literal ({raw} plus a parsed value when the literal is recognised).",
   inputSchema: {
     type: "object",
     required: ["path", "parentPath", "nodeType", "nodeName"],
@@ -50,7 +53,7 @@ export const sceneAddNode: ToolDefinition<AppContext> = {
           properties,
           ...(args["autoRename"] !== undefined ? { autoRename: args["autoRename"] as boolean } : {}),
         });
-        summary = { nodePath: r.nodePath, nodeName: r.name };
+        summary = { nodePath: r.nodePath, nodeName: r.name, created: r.created };
         return r.text;
       },
       { dryRun: args["dryRun"] as boolean | undefined, expectedHash: args["expectedHash"] as string | undefined },

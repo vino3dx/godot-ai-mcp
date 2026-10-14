@@ -7,7 +7,9 @@ export const sceneReparentNode: ToolDefinition<AppContext> = {
   description:
     "Move a node and its whole subtree under a new parent in a .tscn scene (lossless: only the parent/owner header fields of the moved subtree change, and the subtree sections are re-placed to keep depth-first order). " +
     "Refuses to move a node into itself or one of its own descendants. " +
-    "keepGlobalTransform=true is rejected: preserving the global transform needs the engine, which this file-level tool does not use.",
+    "keepGlobalTransform=true is rejected: preserving the global transform needs the engine, which this file-level tool does not use. " +
+    "Also returns moved:{from, to, count}: the original path, the new path and the number of [node] sections rewritten (subtree size; 0 when the node is already there). " +
+    "These are static file values (this tool never runs Godot — a Control's true post-layout position/size comes from runtime_inspect_ui).",
   inputSchema: {
     type: "object",
     required: ["path", "nodePath", "newParentPath"],
@@ -34,7 +36,7 @@ export const sceneReparentNode: ToolDefinition<AppContext> = {
           newParentPath: args["newParentPath"] as string,
           ...(args["keepGlobalTransform"] !== undefined ? { keepGlobalTransform: args["keepGlobalTransform"] as boolean } : {}),
         });
-        summary = { nodePath: r.nodePath, movedNodes: r.movedNodes };
+        summary = { nodePath: r.nodePath, movedNodes: r.movedNodes, moved: r.moved };
         return r.text;
       },
       { dryRun: args["dryRun"] as boolean | undefined, expectedHash: args["expectedHash"] as string | undefined },

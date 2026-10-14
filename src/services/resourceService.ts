@@ -16,6 +16,7 @@ import {
   type GodotResourceProperty,
   type GodotResourceSection,
 } from "../core/parser/index.js";
+import { literalChange, type LiteralChange } from "../core/parser/literal.js";
 
 /** 外部资源引用(ext_resource 条目)。 */
 export interface ExternalResourceRef {
@@ -106,6 +107,17 @@ export class ResourceService {
    * 返回无损序列化后的文本:除目标行/新增行外,其余字节不变。
    */
   updateResourceProperty(tresText: string, sectionHeader: string, key: string, value: string): string {
+    return this.updateResourcePropertyResult(tresText, sectionHeader, key, value).text;
+  }
+
+  /**
+   * 与 updateResourceProperty 完全相同的写入,额外回报结构化前后值。
+   * before/after 都是**文件里的静态字面量**(不是引擎加载后的资源值);
+   * 属性原本不在文件中时 before 为 null 且 inFile=false,不伪造引擎默认值。
+   */
+  updateResourcePropertyResult(
+    tresText: string, sectionHeader: string, key: string, value: string,
+  ): { text: string; change: LiteralChange } {
     if (key.trim() === "" || /[\s=]/.test(key)) {
       throw new GodotMcpError("INVALID_ARGUMENT", `属性名非法(不得含空白或 '='): ${JSON.stringify(key)}`, { key });
     }
@@ -118,6 +130,7 @@ export class ResourceService {
     }
 
     const entry = section.body.find((e): e is GodotResourceProperty => e.kind === "property" && e.name === key);
+    const beforeRaw = entry === undefined ? null : bodyValue(entry);
     if (entry) {
       entry.value = `${separatorOf(entry.value)}${value}`; // 保留原行的 `=` 后空白写法
     } else {
@@ -129,7 +142,7 @@ export class ResourceService {
         eol: section.headerEol,
       });
     }
-    return serializeGodotResource(ast);
+    return { text: serializeGodotResource(ast), change: literalChange(key, beforeRaw, value) };
   }
 
   /**

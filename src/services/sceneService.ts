@@ -4,6 +4,7 @@
 // 依赖 core/parser:
 //   - index.js:parseGodotResource / serializeGodotResource / findGodotResourceSections / getGodotSceneNodes
 //   - internal.js:scanBalance(写入前拒绝会破坏文件的属性值;括号/引号平衡语义的唯一实现处)
+//   - literal.js:写侧工具回报的结构化前后值(文件静态值,不是引擎布局后的值)
 // 格式依据见 src/core/parser/godotResource.ts 与 types.ts 顶部的 4.7.2 源码行号(段头属性、`name = value`)。
 //
 // 读侧(T7)除节点树外还返回 `[connection]` 列表与实例节点的覆盖属性;写入侧对**实例节点**做两条
@@ -23,6 +24,7 @@ import {
   type GodotResourceProperty,
   type GodotResourceSection,
 } from "../core/parser/index.js";
+import { literalChange, toLiteral, type Literal, type LiteralChange } from "../core/parser/literal.js";
 
 /** 场景根节点的规范路径。 */
 const ROOT = ".";
@@ -108,12 +110,53 @@ export interface AddNodeOptions {
   autoRename?: boolean;
 }
 
+/** scene_add_node 创建出来的节点(静态视图:就是写进文件的那些字段)。 */
+export interface CreatedNode {
+  /** 新节点最终路径(autoRename 触发时与请求名不同)。 */
+  nodePath: string;
+  type: string;
+  /** `parent=` 字段的值:根的直接子节点为 "."。 */
+  parent: string;
+  /** 创建时写入段体的属性(name → Literal;同名属性以最后一个为准)。 */
+  properties: Record<string, Literal>;
+}
+
 export interface AddNodeResult {
   /** 无损序列化后的新文本。 */
   text: string;
   /** 新节点最终路径(autoRename 触发时与请求名不同)。 */
   nodePath: string;
   name: string;
+  /** 本次创建写入的信息(文件静态值)。 */
+  created: CreatedNode;
+}
+
+/** scene_update_node_property 的一次改动(静态前后值)。 */
+export interface UpdateNodePropertyResult {
+  text: string;
+  change: LiteralChange;
+}
+
+/** scene_remove_node 删掉的子树。 */
+export interface RemovedNodes {
+  /** 被删子树里的全部节点路径(按文件顺序,含被删节点自身)。 */
+  nodePaths: string[];
+  count: number;
+}
+
+export interface RemoveNodeResult {
+  text: string;
+  removed: RemovedNodes;
+}
+
+/** scene_reparent_node 的位移摘要。 */
+export interface MovedNode {
+  /** 移动前的节点路径(归一化,如 `Holder`)。 */
+  from: string;
+  /** 移动后的节点路径(如 `Player/Holder`)。 */
+  to: string;
+  /** 实际被改写的节点数(目标及其子孙);已在目标父节点下时为 0。 */
+  count: number;
 }
 
 /** scene_reparent_node 的入参。 */
@@ -130,6 +173,8 @@ export interface ReparentNodeResult {
   nodePath: string;
   /** 实际被改写的节点数(目标及其子孙)。 */
   movedNodes: number;
+  /** 本次位移的 from/to/count 摘要(与 nodePath/movedNodes 同源)。 */
+  moved: MovedNode;
 }
 
 /** 分组写操作的入参(scene_add_to_group / scene_remove_from_group 共用)。 */
@@ -166,6 +211,14 @@ export interface InstantiateSceneOptions {
   nodeName?: string;
 }
 
+/** scene_instantiate_scene 放进来的实例节点(静态视图)。 */
+export interface InstantiatedScene {
+  /** 新实例节点的路径。 */
+  nodePath: string;
+  /** 被实例化场景的 res:// 路径(与 instancePath 同源)。 */
+  scene: string;
+}
+
 export interface InstantiateSceneResult {
   text: string;
   nodePath: string;
@@ -174,6 +227,8 @@ export interface InstantiateSceneResult {
   instanceId: string;
   /** 归一化后的 res:// 路径。 */
   instancePath: string;
+  /** 本次实例化的节点与来源场景。 */
+  instantiated: InstantiatedScene;
 }
 
 /** scene_connect_signal / scene_disconnect_signal 的入参。 */
@@ -265,6 +320,15 @@ export class SceneService {
    *      判据只用字面量文本(不查 ClassDB、不解析 .gd 的 @export 注解,见下 inferLiteralType)。
    */
   updateNodeProperty(tscnText: string, nodePath: string, key: string, value: string): string {
+    return this.updateNodePropertyResult(tscnText, nodePath, key, value).text;
+  }
+
+  /**
+   * 与 updateNodeProperty 完全相同的写入,额外回报结构化前后值。
+   * before/after 都是**文件里的静态字面量**(不是引擎布局后的值;Control 的真实位置请用 runtime_inspect_ui);
+   * 属性原本不在文件中时 before 为 null 且 inFile=false,不伪造引擎默认值。
+   */
+  updateNodePropertyResult(tscnText: string, nodePath: string, key: string, value: string): UpdateNodePropertyResult {
     assertPropertyEntry(key, value);
 
     const ast = parseGodotResource(tscnText);
@@ -276,6 +340,7 @@ export class SceneService {
     }
     if (isInstanceSection(section)) assertOverrideValueType(ast, section, key, value);
     const entry = section.body.find((e): e is GodotResourceProperty => e.kind === "property" && e.name === key);
+    const beforeRaw = entry === undefined ? null : bodyValue(entry);
     if (entry) {
       entry.value = `${separatorOf(entry.value)}${value}`; // 保留原行的 `=` 后空白写法
     } else {
@@ -287,26 +352,35 @@ export class SceneService {
         eol: section.headerEol,
       });
     }
-    return serializeGodotResource(ast);
+    return { text: serializeGodotResource(ast), change: literalChange(key, beforeRaw, value) };
   }
 
   /** 删除节点及其所有子节点(含各自段头/段体/尾随空行);返回无损序列化后的文本。 */
   removeNode(tscnText: string, nodePath: string): string {
+    return this.removeNodeResult(tscnText, nodePath).text;
+  }
+
+  /** 与 removeNode 完全相同的删除,额外回报被删子树里的全部节点路径。 */
+  removeNodeResult(tscnText: string, nodePath: string): RemoveNodeResult {
     const target = normalizeNodePath(nodePath);
     if (target === ROOT) {
       throw new GodotMcpError("INVALID_ARGUMENT", "不能删除场景根节点(删除后场景没有根)", { nodePath });
     }
     const ast = parseGodotResource(tscnText);
     const doomed = new Set<GodotResourceSection>();
+    const nodePaths: string[] = [];
     for (const section of findGodotResourceSections(ast, "node")) {
       const path = nodeSectionPath(section);
-      if (path !== undefined && (path === target || path.startsWith(`${target}/`))) doomed.add(section);
+      if (path !== undefined && (path === target || path.startsWith(`${target}/`))) {
+        doomed.add(section);
+        nodePaths.push(path); // 文件顺序即深度优先顺序
+      }
     }
     if (doomed.size === 0) {
       throw new GodotMcpError("INVALID_ARGUMENT", `场景中找不到节点: ${nodePath}`, { nodePath, normalized: target });
     }
     ast.sections = ast.sections.filter((s) => !doomed.has(s));
-    return serializeGodotResource(ast);
+    return { text: serializeGodotResource(ast), removed: { nodePaths, count: nodePaths.length } };
   }
 
   // ────────────────── 写侧(T6):新增 / 移动 / 分组 / 实例化 / 信号 ──────────────────
@@ -337,7 +411,17 @@ export class SceneService {
     const properties = (o.properties ?? []).map((p) => assertPropertyEntry(p.name, p.value));
     const section = renderNodeSection({ name, parentAttr: parent, type, eol, properties });
     ast.sections.splice(subtreeEndIndex(ast, parent) + 1, 0, section);
-    return { text: serializeGodotResource(ast), nodePath: joinNodePath(parent, name), name };
+    return {
+      text: serializeGodotResource(ast),
+      nodePath: joinNodePath(parent, name),
+      name,
+      created: {
+        nodePath: joinNodePath(parent, name),
+        type,
+        parent,
+        properties: Object.fromEntries(properties.map((p) => [p.name, toLiteral(p.value) ?? { raw: p.value }])),
+      },
+    };
   }
 
   /**
@@ -372,7 +456,7 @@ export class SceneService {
     const destPath = joinNodePath(newParent, name);
     if (immediateParentOf(targetSection) === newParent) {
       // 已在新父节点下:不改动(否则会把该子树重排到兄弟末尾,产生无意义的 diff)
-      return { text: tscnText, nodePath: destPath, movedNodes: 0 };
+      return { text: tscnText, nodePath: destPath, movedNodes: 0, moved: { from: target, to: destPath, count: 0 } };
     }
 
     const subtree = ast.sections.filter((s) => isInNodeSubtree(s, target));
@@ -400,7 +484,12 @@ export class SceneService {
       if (p !== undefined && (newParent === ROOT || p.startsWith(`${newParent}/`))) at = i + 1;
     }
     ast.sections = [...rest.slice(0, at), ...subtree, ...rest.slice(at)];
-    return { text: serializeGodotResource(ast), nodePath: destPath, movedNodes: subtree.length };
+    return {
+      text: serializeGodotResource(ast),
+      nodePath: destPath,
+      movedNodes: subtree.length,
+      moved: { from: target, to: destPath, count: subtree.length },
+    };
   }
 
   /** 把节点加入组(已在组内则原样返回,不报错)。 */
@@ -457,7 +546,14 @@ export class SceneService {
       name, parentAttr: parent, type: o.instanceRootType, instanceRef: `ExtResource(${quote(instanceId)})`, eol, properties: [],
     });
     ast.sections.splice(subtreeEndIndex(ast, parent) + 1, 0, section);
-    return { text: serializeGodotResource(ast), nodePath: joinNodePath(parent, name), name, instanceId, instancePath: resPath };
+    return {
+      text: serializeGodotResource(ast),
+      nodePath: joinNodePath(parent, name),
+      name,
+      instanceId,
+      instancePath: resPath,
+      instantiated: { nodePath: joinNodePath(parent, name), scene: resPath },
+    };
   }
 
   /** 连接信号:写入 `[connection ...]` 段(随场景文件持久化)。同一 source/signal/target/method 重复连接报错。 */

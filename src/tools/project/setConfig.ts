@@ -7,7 +7,11 @@ export const projectSetConfig: ToolDefinition<AppContext> = {
   description:
     "Set or add a project.godot config value (lossless: only the target line changes, or a new section/key is appended). " +
     "Examples: section 'application' key 'config/name'; section 'display' key 'window/size/viewport_width'; section 'application' key 'run/main_scene'. " +
-    "value is a raw Godot expression (quote strings, e.g. '\"res://main.tscn\"').",
+    "value is a raw Godot expression (quote strings, e.g. '\"res://main.tscn\"'). " +
+    "Also returns change:{property, before, after, inFile}: the static literal values written in the file text, " +
+    "not the ProjectSettings values the engine reads (this tool never runs Godot; for real layout values use runtime_inspect_ui). " +
+    "property is the key name only (the section is in the section argument); before is null and inFile false when the key was not in the file yet; " +
+    "a literal that cannot be parsed as a Godot literal (e.g. PackedStringArray(...)) is reported as {raw} only.",
   inputSchema: {
     type: "object",
     required: ["section", "key", "value"],
@@ -24,18 +28,22 @@ export const projectSetConfig: ToolDefinition<AppContext> = {
   annotations: { readOnly: false, idempotent: true },
   runtimeRequired: false,
   async handler(args, ctx) {
-    return {
-      data: await ctx.file.editText(
-        args["projectPath"] as string | undefined,
-        args["path"] as string,
-        (text) => ctx.projectConfig.setConfigValue(
+    let summary: Record<string, unknown> = {};
+    const data = await ctx.file.editText(
+      args["projectPath"] as string | undefined,
+      args["path"] as string,
+      (text) => {
+        const r = ctx.projectConfig.setConfigValueResult(
           text,
           args["section"] as string,
           args["key"] as string,
           args["value"] as string,
-        ),
-        { dryRun: args["dryRun"] as boolean | undefined, expectedHash: args["expectedHash"] as string | undefined },
-      ),
-    };
+        );
+        summary = { change: r.change };
+        return r.text;
+      },
+      { dryRun: args["dryRun"] as boolean | undefined, expectedHash: args["expectedHash"] as string | undefined },
+    );
+    return { data: { ...data, ...summary } };
   },
 };

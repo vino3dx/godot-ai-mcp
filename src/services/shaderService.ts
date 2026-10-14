@@ -10,6 +10,7 @@
 import { GodotMcpError } from "../core/errors.js";
 import { findTopLevel, scanBalance, splitLines } from "../core/parser/internal.js";
 import type { LinePiece } from "../core/parser/internal.js";
+import { literalChange, type LiteralChange } from "../core/parser/literal.js";
 
 /** 一个 uniform 声明(结构化解码)。 */
 export interface ShaderUniform {
@@ -51,6 +52,16 @@ export class ShaderService {
    * 只动目标行,其余字节(含缩进、尾随 `//` 注释、行尾)逐字节保留。找不到该 uniform 抛 INVALID_ARGUMENT。
    */
   updateUniformDefault(text: string, name: string, value: string): string {
+    return this.updateUniformDefaultResult(text, name, value).text;
+  }
+
+  /**
+   * 与 updateUniformDefault 完全相同的写入,额外回报结构化前后值。
+   * before/after 都是**文件里的静态字面量**(不是引擎编译后的 uniform 值);
+   * 该 uniform 原本没有 `= default` 时 before 为 null 且 inFile=false。
+   * 注意:uniform 只认单行声明,所以 property 旁边不会给出 `: hint` 之类的信息。
+   */
+  updateUniformDefaultResult(text: string, name: string, value: string): { text: string; change: LiteralChange } {
     assertUniformName(name);
     assertValidValue(name, value);
     const pieces = splitLines(text);
@@ -58,7 +69,7 @@ export class ShaderService {
       const uniform = parseUniform(splitShaderComment(pieces[i]!.text).code.trim());
       if (uniform && uniform.name === name) {
         pieces[i]!.text = rewriteUniformDefault(pieces[i]!.text, value);
-        return joinLines(pieces);
+        return { text: joinLines(pieces), change: literalChange(name, uniform.default ?? null, value) };
       }
     }
     throw new GodotMcpError("INVALID_ARGUMENT", `shader 中找不到 uniform: ${name}`, { name });

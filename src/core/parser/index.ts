@@ -17,6 +17,10 @@ export type {
   GodotNodeAST,
 } from "./types.js";
 
+export type { Literal, LiteralChange } from "./literal.js";
+
+export { parseGodotLiteral, toLiteral, literalChange } from "./literal.js";
+
 export {
   parseGodotConfigFile,
   serializeGodotConfigFile,

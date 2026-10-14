@@ -8,7 +8,9 @@ export const sceneInstantiateScene: ToolDefinition<AppContext> = {
   description:
     "Place a child-scene instance into a .tscn scene: writes an [ext_resource type=\"PackedScene\" ...] entry plus a [node ... instance=ExtResource(\"id\")] node. " +
     "The instanced scene's own nodes are NOT expanded (the file keeps a single instance reference). " +
-    "Instantiating a scene into itself is rejected (no cyclic instantiation). A uid= is not written on the ext_resource (the 4.6.3 runtime saver does not write one either); Godot resolves it by path.",
+    "Instantiating a scene into itself is rejected (no cyclic instantiation). A uid= is not written on the ext_resource (the 4.6.3 runtime saver does not write one either); Godot resolves it by path. " +
+    "Also returns instantiated:{nodePath, scene}: where the instance node was written and which scene it points at (static file values; " +
+    "the instanced scene's own nodes are not part of this file — for real layout values use runtime_inspect_ui).",
   inputSchema: {
     type: "object",
     required: ["path", "parentPath", "instanceScenePath"],
@@ -52,7 +54,13 @@ export const sceneInstantiateScene: ToolDefinition<AppContext> = {
           ...(root.name !== "" ? { instanceRootName: root.name } : {}),
           ...(args["nodeName"] !== undefined ? { nodeName: args["nodeName"] as string } : {}),
         });
-        summary = { nodePath: r.nodePath, nodeName: r.name, instanceId: r.instanceId, instancePath: r.instancePath };
+        summary = {
+          nodePath: r.nodePath,
+          nodeName: r.name,
+          instanceId: r.instanceId,
+          instancePath: r.instancePath,
+          instantiated: r.instantiated,
+        };
         return r.text;
       },
       { dryRun: args["dryRun"] as boolean | undefined, expectedHash: args["expectedHash"] as string | undefined },

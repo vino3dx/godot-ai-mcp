@@ -6,7 +6,11 @@ export const sceneUpdateNodeProperty: ToolDefinition<AppContext> = {
   domain: "scene",
   description:
     "Set or add a property on a node in a .tscn scene (lossless: only the target line changes). " +
-    "nodePath: '.' or '/root' for the root, otherwise a slash path relative to the root (e.g. 'Player/Sprite').",
+    "nodePath: '.' or '/root' for the root, otherwise a slash path relative to the root (e.g. 'Player/Sprite'). " +
+    "Also returns change:{property, before, after, inFile}: the static literal values written in the file text, " +
+    "not engine-computed values (this tool never runs Godot — a Control's true post-layout position/size comes from runtime_inspect_ui). " +
+    "before is null and inFile false when the property was not in the file yet (engine defaults are not guessed); " +
+    "a literal that cannot be parsed (e.g. Transform2D(...), ExtResource(...), arrays) is reported as {raw} only.",
   inputSchema: {
     type: "object",
     required: ["path", "nodePath", "key", "value"],
@@ -23,13 +27,22 @@ export const sceneUpdateNodeProperty: ToolDefinition<AppContext> = {
   annotations: { readOnly: false, idempotent: true },
   runtimeRequired: false,
   async handler(args, ctx) {
-    return {
-      data: await ctx.file.editText(
-        args["projectPath"] as string | undefined,
-        args["path"] as string,
-        (text) => ctx.scene.updateNodeProperty(text, args["nodePath"] as string, args["key"] as string, args["value"] as string),
-        { dryRun: args["dryRun"] as boolean | undefined, expectedHash: args["expectedHash"] as string | undefined },
-      ),
-    };
+    let summary: Record<string, unknown> = {};
+    const data = await ctx.file.editText(
+      args["projectPath"] as string | undefined,
+      args["path"] as string,
+      (text) => {
+        const r = ctx.scene.updateNodePropertyResult(
+          text,
+          args["nodePath"] as string,
+          args["key"] as string,
+          args["value"] as string,
+        );
+        summary = { change: r.change };
+        return r.text;
+      },
+      { dryRun: args["dryRun"] as boolean | undefined, expectedHash: args["expectedHash"] as string | undefined },
+    );
+    return { data: { ...data, ...summary } };
   },
 };

@@ -151,6 +151,37 @@ test("resource_update_property: 修改 [resource] 属性", async (t) => {
   assert.ok(fs.readFileSync(path.join(dir, "materials", "mat.tres"), "utf8").includes("roughness = 0.75"));
 });
 
+test("resource_update_property: change 回报文件静态前后值(含新增属性 before=null)", async (t) => {
+  const { host } = makeHost(t);
+  const wrote = ok(await host.callTool("resource_update_property", {
+    path: "res://materials/mat.tres", sectionHeader: "resource", key: "roughness", value: "0.75",
+  }));
+  assert.deepEqual(wrote["change"], {
+    property: "roughness",
+    before: { raw: "0.5", value: 0.5 },
+    after: { raw: "0.75", value: 0.75 },
+    inFile: true,
+  });
+
+  // 文件里已存在的属性:before 取文件中原来的写法
+  const existing = ok(await host.callTool("resource_update_property", {
+    path: "res://materials/mat.tres", sectionHeader: "resource", key: "albedo_color", value: "Color(0, 1, 0, 1)",
+  }));
+  assert.deepEqual(existing["change"], {
+    property: "albedo_color",
+    before: { raw: "Color(1, 0, 0, 1)", value: { type: "Color", v: [1, 0, 0, 1] } },
+    after: { raw: "Color(0, 1, 0, 1)", value: { type: "Color", v: [0, 1, 0, 1] } },
+    inFile: true,
+  });
+
+  const fresh = ok(await host.callTool("resource_update_property", {
+    path: "res://materials/mat.tres", sectionHeader: "resource", key: "metallic_specular", value: "0.25",
+  }));
+  assert.deepEqual(fresh["change"], {
+    property: "metallic_specular", before: null, after: { raw: "0.25", value: 0.25 }, inFile: false,
+  });
+});
+
 test("resource_add_or_update_external: 新增 ext_resource 条目", async (t) => {
   const { dir, host } = makeHost(t);
   const r = ok(await host.callTool("resource_add_or_update_external", {

@@ -10,6 +10,7 @@
 import { GodotMcpError } from "../core/errors.js";
 import { findTopLevel, scanBalance, splitLines } from "../core/parser/internal.js";
 import type { LinePiece } from "../core/parser/internal.js";
+import { literalChange, type LiteralChange } from "../core/parser/literal.js";
 
 /** 一个 `@export var` 声明(结构化解码)。 */
 export interface ScriptExport {
@@ -51,6 +52,15 @@ export class ScriptService {
    * 只动目标行,其余字节(含缩进、尾随 `#` 注释、行尾)逐字节保留。找不到该变量抛 INVALID_ARGUMENT。
    */
   updateExportDefault(text: string, name: string, value: string): string {
+    return this.updateExportDefaultResult(text, name, value).text;
+  }
+
+  /**
+   * 与 updateExportDefault 完全相同的写入,额外回报结构化前后值。
+   * before/after 都是**文件里的静态字面量**(不是运行中的脚本变量值);
+   * 该 @export 原本没有默认值时 before 为 null 且 inFile=false。
+   */
+  updateExportDefaultResult(text: string, name: string, value: string): { text: string; change: LiteralChange } {
     assertExportName(name);
     assertValidValue(name, value);
     const pieces = splitLines(text);
@@ -58,7 +68,7 @@ export class ScriptService {
       const exp = parseExport(splitGdComment(pieces[i]!.text).code.trim());
       if (exp && exp.name === name) {
         pieces[i]!.text = rewriteExportDefault(pieces[i]!.text, value);
-        return joinLines(pieces);
+        return { text: joinLines(pieces), change: literalChange(name, exp.default ?? null, value) };
       }
     }
     throw new GodotMcpError("INVALID_ARGUMENT", `脚本中找不到 @export 变量: ${name}`, { name });

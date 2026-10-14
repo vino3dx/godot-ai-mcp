@@ -96,6 +96,29 @@ test("project_set_config: 改应用名 + 新增窗口高度键", async (t) => {
   assert.ok(onDisk.includes("window/size/viewport_width=1280")); // 既有键保留
 });
 
+test("project_set_config: change 回报文件静态前后值(新增键 before=null)", async (t) => {
+  const { host } = makeHost(t);
+  const wrote = ok(await host.callTool("project_set_config", {
+    section: "application", key: "config/name", value: '"Renamed"',
+  }));
+  assert.deepEqual(wrote["change"], {
+    property: "config/name",
+    before: { raw: '"Demo Game"', value: "Demo Game" },
+    after: { raw: '"Renamed"', value: "Renamed" },
+    inFile: true,
+  });
+
+  const added = ok(await host.callTool("project_set_config", {
+    section: "display", key: "window/size/viewport_height", value: "720",
+  }));
+  assert.deepEqual(added["change"], {
+    property: "window/size/viewport_height",
+    before: null,
+    after: { raw: "720", value: 720 },
+    inFile: false,
+  });
+});
+
 // ---------- shader ----------
 
 test("shader_get_info / shader_update_uniform_default: 读取与安全更新", async (t) => {
@@ -115,6 +138,27 @@ test("shader_get_info / shader_update_uniform_default: 读取与安全更新", a
   assert.ok(onDisk.includes("uniform vec3 albedo : source_color = vec3(1.0);")); // 其他 uniform 不变
 });
 
+test("shader_update_uniform_default: change 回报文件静态前后值(认不得的表达式只有 raw)", async (t) => {
+  const { host } = makeHost(t);
+  const p = "res://shaders/main.gdshader";
+  const wrote = ok(await host.callTool("shader_update_uniform_default", { path: p, name: "roughness", value: "0.75" }));
+  assert.deepEqual(wrote["change"], {
+    property: "roughness",
+    before: { raw: "0.5", value: 0.5 },
+    after: { raw: "0.75", value: 0.75 },
+    inFile: true,
+  });
+
+  // vec3(...) 不是 Godot 文本字面量的可解析写法 → 只给 raw
+  const vec = ok(await host.callTool("shader_update_uniform_default", { path: p, name: "albedo", value: "vec3(0.2)" }));
+  assert.deepEqual(vec["change"], {
+    property: "albedo",
+    before: { raw: "vec3(1.0)" },
+    after: { raw: "vec3(0.2)" },
+    inFile: true,
+  });
+});
+
 // ---------- script ----------
 
 test("script_get_info / script_update_export_default: 读取与安全更新", async (t) => {
@@ -132,6 +176,18 @@ test("script_get_info / script_update_export_default: 读取与安全更新", as
   const onDisk = fs.readFileSync(path.join(dir, "scripts", "player.gd"), "utf8");
   assert.ok(onDisk.includes("@export var speed: float = 500.0"));
   assert.ok(onDisk.includes("class_name Player")); // 其余字节不变
+});
+
+test("script_update_export_default: change 回报文件静态前后值", async (t) => {
+  const { host } = makeHost(t);
+  const p = "res://scripts/player.gd";
+  const wrote = ok(await host.callTool("script_update_export_default", { path: p, name: "speed", value: "500.0" }));
+  assert.deepEqual(wrote["change"], {
+    property: "speed",
+    before: { raw: "300.0", value: 300 },
+    after: { raw: "500.0", value: 500 },
+    inFile: true,
+  });
 });
 
 // ---------- 错误信封 ----------

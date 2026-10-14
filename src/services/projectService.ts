@@ -18,6 +18,7 @@ import {
   type GodotConfigSection,
   type GodotLineEnding,
 } from "../core/parser/index.js";
+import { literalChange, type LiteralChange } from "../core/parser/literal.js";
 
 /** 一个配置键及其原始值文本(未解码、可无损写回)。 */
 export interface ProjectConfigValue {
@@ -70,6 +71,16 @@ export class ProjectService {
    * value 为 Godot 原始表达式(字符串需自带引号,如 `"res://main.tscn"`)。
    */
   setConfigValue(text: string, section: string, key: string, value: string): string {
+    return this.setConfigValueResult(text, section, key, value).text;
+  }
+
+  /**
+   * 与 setConfigValue 完全相同的写入,额外回报结构化前后值。
+   * before/after 都是**文件里的静态字面量**(不是引擎读取后的 ProjectSettings 值);
+   * 该键原本不在文件中时 before 为 null 且 inFile=false。
+   * change.property 是键名(不含段名),段名见 setConfigValue 的 section 入参。
+   */
+  setConfigValueResult(text: string, section: string, key: string, value: string): { text: string; change: LiteralChange } {
     assertSectionName(section);
     assertKeyName(key);
     assertValidValue(key, value);
@@ -78,17 +89,18 @@ export class ProjectService {
     const newline = ast.newline as GodotLineEnding;
 
     const sec = ast.sections.find((s) => s.name === section);
+    const existing = sec?.entries.find((e): e is GodotConfigKeyEntry => e.kind === "key" && e.key === key);
+    const beforeRaw = existing === undefined ? null : existing.value;
     if (sec) {
-      const entry = sec.entries.find((e): e is GodotConfigKeyEntry => e.kind === "key" && e.key === key);
-      if (entry) {
-        entry.value = value; // 只替换值文本,保留键、等号写法与行尾
+      if (existing) {
+        existing.value = value; // 只替换值文本,保留键、等号写法与行尾
       } else {
         sec.entries.splice(insertKeyIndex(sec.entries), 0, makeKeyEntry(key, value, newline));
       }
     } else {
       appendSection(ast, makeSection(section, key, value, newline));
     }
-    return serializeGodotConfigFile(ast);
+    return { text: serializeGodotConfigFile(ast), change: literalChange(key, beforeRaw, value) };
   }
 }
 

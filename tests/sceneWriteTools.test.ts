@@ -318,3 +318,114 @@ test("scene_disconnect_signal: 正常路径删除连接;不存在时明确提示
 
   assert.equal(err(await host.callTool("scene_disconnect_signal", { path: p, sourcePath: "Player", signal: "1bad", targetPath: ".", method: "_x" })).code, "INVALID_ARGUMENT");
 });
+
+// ────────────── P2:写工具回报结构化静态前后值(change / created / removed / moved / instantiated) ──────────────
+//
+// 这些值取自文件文本(本套工具不启动引擎),不是布局后的真实值;Control 的真实位置由 runtime_inspect_ui 提供。
+
+test("scene_update_node_property: change 回报文件静态前后值(dryRun 也给出)", async (t) => {
+  const { dir, host } = makeHost(t);
+  const p = "res://scenes/main.tscn";
+
+  const dry = ok(await host.callTool("scene_update_node_property", {
+    path: p, nodePath: "Player", key: "position", value: "Vector2(1, 2)", dryRun: true,
+  }));
+  assert.deepEqual(dry["change"], {
+    property: "position",
+    before: { raw: "Vector2(0, 0)", value: { type: "Vector2", v: [0, 0] } },
+    after: { raw: "Vector2(1, 2)", value: { type: "Vector2", v: [1, 2] } },
+    inFile: true,
+  });
+  assert.ok(!read(dir, "scenes/main.tscn").includes("Vector2(1, 2)"), "dryRun 不得落盘");
+
+  // 文件里原本没有该属性:before=null 且 inFile=false(不猜引擎默认值)
+  const added = ok(await host.callTool("scene_update_node_property", {
+    path: p, nodePath: "Player", key: "z_index", value: "3",
+  }));
+  assert.deepEqual(added["change"], {
+    property: "z_index", before: null, after: { raw: "3", value: 3 }, inFile: false,
+  });
+
+  // 认不得的字面量:只给 raw(不含 value 字段)
+  const opaque = ok(await host.callTool("scene_update_node_property", {
+    path: p, nodePath: "Player", key: "transform", value: "Transform2D(1, 0, 0, 1, 0, 0)",
+  }));
+  const change = opaque["change"] as { before: unknown; after: Record<string, unknown> };
+  assert.deepEqual(change.before, null);
+  assert.deepEqual(change.after, { raw: "Transform2D(1, 0, 0, 1, 0, 0)" });
+  assert.equal("value" in change.after, false);
+});
+
+test("scene_add_node: created 回报新节点与写入的属性(静态值)", async (t) => {
+  const { host } = makeHost(t);
+  const r = ok(await host.callTool("scene_add_node", {
+    path: "res://scenes/main.tscn",
+    parentPath: "Player",
+    nodeType: "CharacterBody2D",
+    nodeName: "Enemy",
+    properties: [
+      { name: "position", value: "Vector2(5, 6)" },
+      { name: "visible", value: "false" },
+      { name: "shape", value: 'SubResource("1_x")' },
+    ],
+  }));
+  assert.deepEqual(r["created"], {
+    nodePath: "Player/Enemy",
+    type: "CharacterBody2D",
+    parent: "Player",
+    properties: {
+      position: { raw: "Vector2(5, 6)", value: { type: "Vector2", v: [5, 6] } },
+      visible: { raw: "false", value: false },
+      shape: { raw: 'SubResource("1_x")' }, // 认不得 → 只有 raw
+    },
+  });
+
+  // 不写属性时 properties 为空对象;parent 为根的直接子节点时是 "."
+  const bare = ok(await host.callTool("scene_add_node", {
+    path: "res://scenes/main.tscn", parentPath: ".", nodeType: "Node2D", nodeName: "Bare",
+  }));
+  assert.deepEqual(bare["created"], { nodePath: "Bare", type: "Node2D", parent: ".", properties: {} });
+});
+
+test("scene_remove_node: removed 回报整棵被删子树(文件顺序)", async (t) => {
+  const { host } = makeHost(t);
+  const p = "res://scenes/main.tscn";
+  const one = ok(await host.callTool("scene_remove_node", { path: p, nodePath: "Player/Sprite" }));
+  assert.deepEqual(one["removed"], { nodePaths: ["Player/Sprite"], count: 1 });
+
+  ok(await host.callTool("scene_add_node", { path: p, parentPath: "Player", nodeType: "Node2D", nodeName: "Holder" }));
+  ok(await host.callTool("scene_add_node", { path: p, parentPath: "Player/Holder", nodeType: "Marker2D", nodeName: "Leaf" }));
+  const sub = ok(await host.callTool("scene_remove_node", { path: p, nodePath: "Player" }));
+  assert.deepEqual(sub["removed"], {
+    nodePaths: ["Player", "Player/Holder", "Player/Holder/Leaf"],
+    count: 3,
+  });
+});
+
+test("scene_reparent_node: moved 回报 from/to/count(幂等时为 0)", async (t) => {
+  const { host } = makeHost(t);
+  const p = "res://scenes/main.tscn";
+  ok(await host.callTool("scene_add_node", { path: p, parentPath: ".", nodeType: "Node2D", nodeName: "Holder" }));
+  ok(await host.callTool("scene_add_node", { path: p, parentPath: "Holder", nodeType: "Marker2D", nodeName: "Leaf" }));
+
+  const r = ok(await host.callTool("scene_reparent_node", { path: p, nodePath: "Holder", newParentPath: "Player" }));
+  assert.deepEqual(r["moved"], { from: "Holder", to: "Player/Holder", count: 2 });
+
+  const again = ok(await host.callTool("scene_reparent_node", { path: p, nodePath: "Player/Holder", newParentPath: "Player" }));
+  assert.equal(again["changed"], false);
+  assert.deepEqual(again["moved"], { from: "Player/Holder", to: "Player/Holder", count: 0 });
+});
+
+test("scene_instantiate_scene: instantiated 回报节点路径与来源场景", async (t) => {
+  const { host } = makeHost(t);
+  const p = "res://scenes/main.tscn";
+  const r = ok(await host.callTool("scene_instantiate_scene", {
+    path: p, parentPath: "Player", instanceScenePath: "res://scenes/child.tscn",
+  }));
+  assert.deepEqual(r["instantiated"], { nodePath: "Player/Child", scene: "res://scenes/child.tscn" });
+
+  const named = ok(await host.callTool("scene_instantiate_scene", {
+    path: p, parentPath: ".", instanceScenePath: "res://scenes/child.tscn", nodeName: "Second",
+  }));
+  assert.deepEqual(named["instantiated"], { nodePath: "Second", scene: "res://scenes/child.tscn" });
+});

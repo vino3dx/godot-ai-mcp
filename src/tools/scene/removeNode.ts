@@ -6,7 +6,10 @@ export const sceneRemoveNode: ToolDefinition<AppContext> = {
   domain: "scene",
   description:
     "Remove a node and all its descendants from a .tscn scene (lossless: other sections stay byte-identical). " +
-    "Rejects removing the scene root ('.' or '/root').",
+    "Rejects removing the scene root ('.' or '/root'). " +
+    "Also returns removed:{nodePaths, count}: the paths of every [node] section deleted from the file text, " +
+    "including the descendants of the removed node (file order, i.e. depth-first). " +
+    "These are static file values (this tool never runs Godot); a Control's true post-layout position/size comes from runtime_inspect_ui instead.",
   inputSchema: {
     type: "object",
     required: ["path", "nodePath"],
@@ -21,13 +24,17 @@ export const sceneRemoveNode: ToolDefinition<AppContext> = {
   annotations: { readOnly: false, destructive: true },
   runtimeRequired: false,
   async handler(args, ctx) {
-    return {
-      data: await ctx.file.editText(
-        args["projectPath"] as string | undefined,
-        args["path"] as string,
-        (text) => ctx.scene.removeNode(text, args["nodePath"] as string),
-        { dryRun: args["dryRun"] as boolean | undefined, expectedHash: args["expectedHash"] as string | undefined },
-      ),
-    };
+    let summary: Record<string, unknown> = {};
+    const data = await ctx.file.editText(
+      args["projectPath"] as string | undefined,
+      args["path"] as string,
+      (text) => {
+        const r = ctx.scene.removeNodeResult(text, args["nodePath"] as string);
+        summary = { removed: r.removed };
+        return r.text;
+      },
+      { dryRun: args["dryRun"] as boolean | undefined, expectedHash: args["expectedHash"] as string | undefined },
+    );
+    return { data: { ...data, ...summary } };
   },
 };
