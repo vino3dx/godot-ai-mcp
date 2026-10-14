@@ -39,6 +39,24 @@ import {
   type UiIssueSummary,
   type UiIssueType,
 } from "../godot/runtime/inspectUi.js";
+import {
+  buildCheckAddonStatusArgs,
+  CHECK_ADDON_STATUS_SCRIPT,
+  computeDiagnosis,
+  isAddonStatusPayload,
+  isPlatformMatch,
+  MAX_ADDON_CHECK_CLASSES,
+  parseEnabledPluginPaths,
+  parseExtensionList,
+  parseGdextension,
+  parsePluginCfg,
+  type AddonClassInfo,
+  type AddonEngine,
+  type AddonExtensionInfo,
+  type AddonPluginInfo,
+  type AddonStatusResult,
+  type GdextensionLibraryInfo,
+} from "../godot/runtime/checkAddonStatus.js";
 import { MCP_RESULT_PREFIX, parseMcpResultJson, withTempScript } from "../godot/runtime/scriptRunner.js";
 import type { GodotCliService } from "./godotCli.js";
 
@@ -160,6 +178,18 @@ export interface InspectUiResult {
   source: GodotSource;
   projectDir: string;
 }
+
+export interface CheckAddonStatusOptions {
+  projectPath?: string;
+  /** 要检查是否在 ClassDB 中注册的类名;最多 MAX_ADDON_CHECK_CLASSES 个。 */
+  classes?: readonly string[];
+  timeoutMs?: number;
+  waitTimeoutMs?: number;
+  tool: string;
+}
+
+/** 引擎 stderr 摘要上限(扩展加载失败会打印多行 ERROR,截断后仍足以定位)。 */
+export const MAX_ENGINE_STDERR_SUMMARY = 4000;
 
 /** 返回给工具层的归一化运行结果。 */
 export interface RuntimeRunResult {
@@ -371,6 +401,169 @@ export class RuntimeService {
     };
   }
 
+  /**
+   * 插件 / GDExtension 注册状态探针:静态扫描(.gdextension、.godot/extension_list.cfg、已启用插件)
+   * + 一次 headless `--script` 引擎探针(loaded extensions / ClassDB 注册 / 引擎版本),最后汇总 diagnosis。
+   *
+   * 静态部分不依赖引擎:找不到 Godot、超时、非零退出、回传形状不对时**仍然返回**,
+   * 此时 engine = {ok:false, error:{code,message}},而 extensions[].loaded 与 classes 为 null
+   * (= 未知,不是 false / "不存在");diagnosis 里也不再给 extension_not_loaded / class_missing。
+   *
+   * 只读:不保存场景、不写任何项目文件;但 `--script` 会初始化项目并**执行 autoload**(4.6.3 实测),
+   * 所以工具层 annotations.readOnly 标为 false。
+   */
+  async checkAddonStatus(o: CheckAddonStatusOptions): Promise<AddonStatusResult> {
+    const startedAt = Date.now();
+    const projectDir = this.projectDir(o.projectPath);
+    const requested = o.classes ?? [];
+    if (requested.length > MAX_ADDON_CHECK_CLASSES) {
+      throw new GodotMcpError(
+        "INVALID_ARGUMENT",
+        `classes must contain at most ${MAX_ADDON_CHECK_CLASSES} entries`,
+        { count: requested.length, max: MAX_ADDON_CHECK_CLASSES },
+      );
+    }
+
+    // 静态扫描放在引擎运行之前:报告应反映"进来时"的工程,而不是引擎跑完可能补出的 .godot 缓存。
+    const listed = this.readExtensionList(projectDir);
+    const extensions = this.scanGdextensions(projectDir, listed === null ? null : new Set(listed));
+    const plugins = this.scanEnabledPlugins(projectDir);
+
+    let engine: AddonEngine;
+    let loadedExtensions: string[] | null = null;
+    let classResults: Record<string, AddonClassInfo> | null = null;
+    try {
+      const { path: file, source } = this.locate();
+      const res = await withTempScript(
+        CHECK_ADDON_STATUS_SCRIPT,
+        (scriptPath) =>
+          this.execute(
+            file, source, projectDir,
+            buildCheckAddonStatusArgs(projectDir, scriptPath, requested),
+            { timeoutMs: o.timeoutMs, waitTimeoutMs: o.waitTimeoutMs, tool: o.tool, target: "addon-status" },
+          ),
+        { prefix: "addon-status" },
+      );
+      const parsed = parseMcpResultJson(res.stdout);
+      if (!parsed.ok) {
+        throw new GodotMcpError("RUNTIME_FAILED", `Engine did not print a ${MCP_RESULT_PREFIX}<json> line`, {
+          reason: parsed.reason, detail: parsed.message, stdout: res.stdout, stderr: res.stderr,
+        });
+      }
+      if (!isAddonStatusPayload(parsed.value)) {
+        throw new GodotMcpError("RUNTIME_FAILED", "Engine returned an unexpected addon-status shape", {
+          stdout: res.stdout, stderr: res.stderr,
+        });
+      }
+      const payload = parsed.value;
+      loadedExtensions = payload.loadedExtensions;
+      classResults = payload.classes;
+      const summary = summarizeStderr(res.stderr);
+      engine = summary === undefined
+        ? { ok: true, version: payload.engineVersion }
+        : { ok: true, version: payload.engineVersion, stderr: summary };
+    } catch (e) {
+      const err = e instanceof GodotMcpError
+        ? e
+        : new GodotMcpError("RUNTIME_FAILED", e instanceof Error ? e.message : String(e));
+      engine = { ok: false, error: { code: err.code, message: err.message } };
+    }
+
+    const loadedSet = loadedExtensions === null ? null : new Set(loadedExtensions);
+    const extensionsWithLoaded: AddonExtensionInfo[] = extensions.map((ext) => ({
+      ...ext,
+      loaded: loadedSet === null ? null : loadedSet.has(ext.path),
+    }));
+
+    return {
+      engine,
+      extensionListFound: listed !== null,
+      extensions: extensionsWithLoaded,
+      classes: classResults,
+      plugins,
+      diagnosis: computeDiagnosis({
+        extensionListFound: listed !== null,
+        extensions: extensionsWithLoaded,
+        loadedExtensions,
+        requestedClasses: requested,
+        classResults,
+        plugins,
+      }),
+      durationMs: Date.now() - startedAt,
+    };
+  }
+
+  /** 读 .godot/extension_list.cfg;不存在(或读不动)返回 null。 */
+  private readExtensionList(projectDir: string): string[] | null {
+    try {
+      return parseExtensionList(fs.readFileSync(path.join(projectDir, ".godot", "extension_list.cfg"), "utf8"));
+    } catch {
+      return null;
+    }
+  }
+
+  /** 扫描工程内所有 *.gdextension,按 res:// 路径升序返回(排序保证 diagnosis 与返回顺序稳定)。 */
+  private scanGdextensions(projectDir: string, listed: ReadonlySet<string> | null): AddonExtensionInfo[] {
+    return collectFilesWithExtension(projectDir, ".gdextension")
+      .map((file) => {
+        const resPath = toResPath(projectDir, file);
+        let parsed: { entrySymbol?: string; compatibilityMinimum?: string; libraries: { key: string; path: string }[] } = { libraries: [] };
+        try {
+          parsed = parseGdextension(fs.readFileSync(file, "utf8"));
+        } catch {
+          // 单个 .gdextension 解析失败不拖垮整份诊断:按"没有可读库"处理
+          // (约定结构里没有逐扩展的错误字段;此限制已写入报告)。
+        }
+        const libraries: GdextensionLibraryInfo[] = parsed.libraries.map((l) => ({
+          key: l.key,
+          path: l.path,
+          exists: fs.existsSync(resolveProjectPath(projectDir, l.path)),
+          platformMatch: isPlatformMatch(l.key, process.platform),
+        }));
+        const info: AddonExtensionInfo = {
+          path: resPath,
+          loaded: null,
+          listedInExtensionList: listed?.has(resPath) ?? false,
+          libraries,
+        };
+        if (parsed.entrySymbol !== undefined) info.entrySymbol = parsed.entrySymbol;
+        if (parsed.compatibilityMinimum !== undefined) info.compatibilityMinimum = parsed.compatibilityMinimum;
+        return info;
+      })
+      .sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  /**
+   * 读 project.godot 的 [editor_plugins] enabled,逐个检查 plugin.cfg 及其 script 是否存在。
+   * 只报告"已启用 + 文件齐全",**不声称插件已加载**(加载与否要问引擎,不在这一层)。
+   */
+  private scanEnabledPlugins(projectDir: string): AddonPluginInfo[] {
+    let projectText: string;
+    try {
+      projectText = fs.readFileSync(path.join(projectDir, "project.godot"), "utf8");
+    } catch {
+      return [];
+    }
+    return parseEnabledPluginPaths(projectText).map((pluginPath) => {
+      const abs = resolveProjectPath(projectDir, pluginPath);
+      const cfgExists = fs.existsSync(abs);
+      const info: AddonPluginInfo = { path: pluginPath, cfgExists, scriptExists: false };
+      if (!cfgExists) return info;
+      let cfg: { name?: string; script?: string };
+      try {
+        cfg = parsePluginCfg(fs.readFileSync(abs, "utf8"));
+      } catch {
+        return info;
+      }
+      if (cfg.name !== undefined) info.name = cfg.name;
+      if (cfg.script !== undefined) {
+        info.script = cfg.script;
+        info.scriptExists = fs.existsSync(resolvePluginScript(projectDir, abs, cfg.script));
+      }
+      return info;
+    });
+  }
+
   private locate(): { path: string; source: GodotSource } {
     return this.opts.godot.locate();
   }
@@ -443,4 +636,57 @@ function mapRunError(e: unknown, file: string): never {
   throw new GodotMcpError("GODOT_PROCESS_FAILED", `Failed to spawn Godot: ${file}`, {
     resolvedPath: file, reason: typeof err?.code === "string" ? err.code : String(e),
   });
+}
+
+// ────────────────────── runtime_check_addon_status 的静态扫描辅助 ──────────────────────
+
+/**
+ * 递归收集扩展名匹配的文件绝对路径。**跳过以 `.` 开头的目录**(`.godot` 缓存、`.git` 等):
+ * 与引擎把 res:// 资源树排除点目录的口径一致,也保证不会去扫 .godot 里的扩展清单副本。
+ */
+function collectFilesWithExtension(dir: string, extension: string): string[] {
+  const out: string[] = [];
+  const walk = (current: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      return; // 无权限/中途消失:跳过该目录,不拖垮整份诊断
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      const abs = path.join(current, entry.name);
+      if (entry.isDirectory()) walk(abs);
+      else if (entry.isFile() && entry.name.endsWith(extension)) out.push(abs);
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+/** 工程内绝对路径 → res:// 路径(统一正斜杠)。 */
+function toResPath(projectDir: string, absPath: string): string {
+  return "res://" + path.relative(projectDir, absPath).split(path.sep).join("/");
+}
+
+/** res:// 或工程相对路径 → 工程内绝对路径;已是绝对路径则原样返回。 */
+function resolveProjectPath(projectDir: string, p: string): string {
+  if (p.startsWith("res://")) return path.join(projectDir, p.slice("res://".length));
+  return path.isAbsolute(p) ? p : path.join(projectDir, p);
+}
+
+/** plugin.cfg 的 script 字段 → 绝对路径(res:// 按工程根,其余相对 plugin.cfg 所在目录)。 */
+function resolvePluginScript(projectDir: string, pluginCfgPath: string, script: string): string {
+  return script.startsWith("res://")
+    ? resolveProjectPath(projectDir, script)
+    : path.join(path.dirname(pluginCfgPath), script);
+}
+
+/** 引擎 stderr 的非空摘要;干净时返回 undefined(不产出空的 stderr 字段)。 */
+function summarizeStderr(stderr: string): string | undefined {
+  const text = stderr.trim();
+  if (text === "") return undefined;
+  return text.length > MAX_ENGINE_STDERR_SUMMARY
+    ? `${text.slice(0, MAX_ENGINE_STDERR_SUMMARY)}…(truncated)`
+    : text;
 }

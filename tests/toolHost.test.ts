@@ -77,7 +77,7 @@ test("minimal real tools through the composition root", async () => {
   assert.deepEqual(h.listTools().map((x) => x.name).sort(), [
     "project_get_config", "project_set_config",
     "resource_add_or_update_external", "resource_get_info", "resource_update_property",
-    "runtime_capture_screenshot", "runtime_export_project", "runtime_get_version", "runtime_inspect_ui", "runtime_run_project", "runtime_run_scene",
+    "runtime_capture_screenshot", "runtime_check_addon_status", "runtime_export_project", "runtime_get_version", "runtime_inspect_ui", "runtime_run_project", "runtime_run_scene",
     "scene_add_node", "scene_add_to_group", "scene_connect_signal", "scene_disconnect_signal",
     "scene_get_node_info", "scene_get_tree", "scene_instantiate_scene", "scene_remove_from_group", "scene_remove_node",
     "scene_reparent_node", "scene_update_node_property",
