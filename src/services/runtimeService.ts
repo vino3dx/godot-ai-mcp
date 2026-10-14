@@ -26,6 +26,20 @@ import {
   readPngSize,
   SCREENSHOT_SCRIPT,
 } from "../godot/runtime/screenshot.js";
+import {
+  buildInspectUiArgs,
+  computeUiIssues,
+  DEFAULT_INSPECT_FRAMES,
+  DEFAULT_MAX_INSPECT_NODES,
+  INSPECT_UI_SCRIPT,
+  isUiInspectPayload,
+  MAX_INSPECT_FRAMES,
+  summarizeUiIssues,
+  type InspectedControl,
+  type UiIssueSummary,
+  type UiIssueType,
+} from "../godot/runtime/inspectUi.js";
+import { MCP_RESULT_PREFIX, parseMcpResultJson, withTempScript } from "../godot/runtime/scriptRunner.js";
 import type { GodotCliService } from "./godotCli.js";
 
 /** 冷启动 + 首帧 + 退出,实测未测;取宽,由工具参数 timeoutMs 覆盖。 */
@@ -102,6 +116,51 @@ export interface CaptureScreenshotResult {
   imageBase64?: string;
 }
 
+export interface InspectUiOptions {
+  projectPath?: string;
+  /** 要探测的场景(res:// 或项目相对路径);必填。 */
+  scene: string;
+  /** 只探测这些节点(相对场景根);不传则遍历全部 Control。 */
+  nodePaths?: readonly string[];
+  /** 等待布局稳定的帧数;缺省 DEFAULT_INSPECT_FRAMES,上限 MAX_INSPECT_FRAMES。 */
+  frames?: number;
+  /** 覆盖视口宽/高(必须成对);缺省用工程 display/window/size/viewport_* 设置。 */
+  width?: number;
+  height?: number;
+  /** 是否也返回 not visible_in_tree 的 Control;缺省 false。 */
+  includeHidden?: boolean;
+  /** 返回节点数上限;缺省 DEFAULT_MAX_INSPECT_NODES,超出截断并置 truncated。 */
+  maxNodes?: number;
+  timeoutMs?: number;
+  waitTimeoutMs?: number;
+  tool: string;
+}
+
+/** 单个 Control 的探测结果 = 引擎快照 + 由 computeUiIssues 判定的布局问题。 */
+export interface InspectedUiNode extends InspectedControl {
+  issues: UiIssueType[];
+}
+
+export interface InspectUiResult {
+  scene: string;
+  viewportSize: { width: number; height: number };
+  /** 命中的 Control 总数(截断前)。 */
+  nodeCount: number;
+  truncated: boolean;
+  nodes: InspectedUiNode[];
+  /** 请求了但没能解析成 Control 的 nodePaths。 */
+  missing: string[];
+  /** 各 issue 类型的命中节点数(只统计返回出去的节点)。 */
+  summary: UiIssueSummary;
+  engineVersion: string;
+  durationMs: number;
+  /** 展示用命令串(不用于执行)。 */
+  command: string;
+  resolvedPath: string;
+  source: GodotSource;
+  projectDir: string;
+}
+
 /** 返回给工具层的归一化运行结果。 */
 export interface RuntimeRunResult {
   exitCode: number | null;
@@ -167,28 +226,28 @@ export class RuntimeService {
     const { path: file, source } = this.locate();
     const projectDir = this.projectDir(o.projectPath);
     const waitFrames = o.waitFrames ?? DEFAULT_WAIT_FRAMES;
-    const scriptPath = path.join(os.tmpdir(), "godot-ai-mcp", `capture-${randomUUID()}.gd`);
     const screenshotDir = path.join(os.tmpdir(), "godot-ai-mcp", "screenshots");
     const outPath = path.join(screenshotDir, `shot-${randomUUID()}.png`);
-    fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
     fs.mkdirSync(screenshotDir, { recursive: true });
-    fs.writeFileSync(scriptPath, SCREENSHOT_SCRIPT, "utf8");
-    const args = buildScreenshotArgs(projectDir, {
-      scriptPath,
-      outPath,
-      scene: o.scene,
-      waitFrames,
-      outputWidth: o.outputWidth,
-      outputHeight: o.outputHeight,
-    });
     let res: RuntimeRunResult;
     try {
-      res = await this.execute(file, source, projectDir, args, {
-        timeoutMs: o.timeoutMs,
-        waitTimeoutMs: o.waitTimeoutMs,
-        tool: o.tool,
-        target: o.scene ?? "screenshot",
-      });
+      res = await withTempScript(
+        SCREENSHOT_SCRIPT,
+        (scriptPath) =>
+          this.execute(
+            file, source, projectDir,
+            buildScreenshotArgs(projectDir, {
+              scriptPath,
+              outPath,
+              scene: o.scene,
+              waitFrames,
+              outputWidth: o.outputWidth,
+              outputHeight: o.outputHeight,
+            }),
+            { timeoutMs: o.timeoutMs, waitTimeoutMs: o.waitTimeoutMs, tool: o.tool, target: o.scene ?? "screenshot" },
+          ),
+        { prefix: "capture" },
+      );
     } catch (e) {
       // 脚本对场景 load 失败显式 quit(2),映射为 FILE_NOT_FOUND(场景不存在)。
       if (e instanceof GodotMcpError && e.code === "GODOT_PROCESS_FAILED" && e.details?.["exitCode"] === 2) {
@@ -199,8 +258,6 @@ export class RuntimeService {
         });
       }
       throw e;
-    } finally {
-      fs.rmSync(scriptPath, { force: true });
     }
     let buf: Buffer;
     try {
@@ -235,6 +292,83 @@ export class RuntimeService {
       result.imageBase64 = buf.toString("base64");
     }
     return result;
+  }
+
+  /**
+   * 运行时 UI 布局探针(**非 headless**):临时 GDScript 加载场景 → 等 frames 帧 → 采集每个 Control
+   * 的真实矩形/最小尺寸/父级关系 → 单行 MCP_RESULT_JSON 回传 → 这里补算 issues 与 summary。
+   *
+   * 严格只读:不保存场景、不写任何项目文件、不调用 ResourceSaver;但会执行场景内脚本(_ready/_process)。
+   * 非 headless 的硬性理由见 godot/runtime/inspectUi.ts 顶部实测结论(headless 视口恒 64x64,布局会被压扁)。
+   */
+  async inspectUi(o: InspectUiOptions): Promise<InspectUiResult> {
+    const { path: file, source } = this.locate();
+    const projectDir = this.projectDir(o.projectPath);
+    const frames = clampInt(o.frames ?? DEFAULT_INSPECT_FRAMES, 1, MAX_INSPECT_FRAMES);
+    const maxNodes = Math.max(1, o.maxNodes ?? DEFAULT_MAX_INSPECT_NODES);
+    let res: RuntimeRunResult;
+    try {
+      res = await withTempScript(
+        INSPECT_UI_SCRIPT,
+        (scriptPath) =>
+          this.execute(
+            file, source, projectDir,
+            buildInspectUiArgs(projectDir, {
+              scriptPath,
+              scene: o.scene,
+              nodePaths: o.nodePaths ?? [],
+              frames,
+              ...(o.width !== undefined ? { width: o.width } : {}),
+              ...(o.height !== undefined ? { height: o.height } : {}),
+              includeHidden: o.includeHidden ?? false,
+              maxNodes,
+            }),
+            { timeoutMs: o.timeoutMs, waitTimeoutMs: o.waitTimeoutMs, tool: o.tool, target: o.scene },
+          ),
+        { prefix: "inspect-ui" },
+      );
+    } catch (e) {
+      // 脚本对场景 load 失败显式 quit(2),映射为 FILE_NOT_FOUND(场景不存在)。
+      if (e instanceof GodotMcpError && e.code === "GODOT_PROCESS_FAILED" && e.details?.["exitCode"] === 2) {
+        throw new GodotMcpError("FILE_NOT_FOUND", `Scene not found: ${o.scene}`, {
+          scene: o.scene,
+          resolvedPath: e.details?.["resolvedPath"],
+          stderr: e.details?.["stderr"],
+        });
+      }
+      throw e;
+    }
+    const parsed = parseMcpResultJson(res.stdout);
+    if (!parsed.ok) {
+      throw new GodotMcpError("RUNTIME_FAILED", `Engine did not print a ${MCP_RESULT_PREFIX}<json> line`, {
+        scene: o.scene, reason: parsed.reason, detail: parsed.message, stdout: res.stdout, stderr: res.stderr,
+      });
+    }
+    if (!isUiInspectPayload(parsed.value)) {
+      throw new GodotMcpError("RUNTIME_FAILED", "Engine returned an unexpected layout result shape", {
+        scene: o.scene, stdout: res.stdout, stderr: res.stderr,
+      });
+    }
+    const payload = parsed.value;
+    const nodes: InspectedUiNode[] = payload.nodes.map((n) => ({
+      ...n,
+      issues: computeUiIssues(n, payload.viewportSize),
+    }));
+    return {
+      scene: payload.scene,
+      viewportSize: payload.viewportSize,
+      nodeCount: payload.nodeCount,
+      truncated: payload.truncated,
+      nodes,
+      missing: payload.missing,
+      summary: summarizeUiIssues(nodes),
+      engineVersion: payload.engineVersion,
+      durationMs: res.durationMs,
+      command: res.command,
+      resolvedPath: res.resolvedPath,
+      source: res.source,
+      projectDir: res.projectDir,
+    };
   }
 
   private locate(): { path: string; source: GodotSource } {
@@ -290,6 +424,11 @@ export class RuntimeService {
     }
     return { ...res, command, resolvedPath: file, source, projectDir };
   }
+}
+
+/** 把数值夹到 [min, max](工具层已按 schema 校验,这里是服务层的兜底)。 */
+function clampInt(v: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.trunc(v)));
 }
 
 /** spawn 阶段的错误 → 统一错误码:ENOENT 归 GODOT_NOT_FOUND,其余归 GODOT_PROCESS_FAILED。 */

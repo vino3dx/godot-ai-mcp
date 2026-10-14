@@ -8,6 +8,7 @@ import { runtimeRunProject } from "./runtime/runProject.js";
 import { runtimeRunScene } from "./runtime/runScene.js";
 import { runtimeExportProject } from "./runtime/exportProject.js";
 import { runtimeCaptureScreenshot } from "./runtime/captureScreenshot.js";
+import { runtimeInspectUi } from "./runtime/inspectUi.js";
 import { sceneGetTree } from "./scene/getTree.js";
 import { sceneGetNodeInfo } from "./scene/getNodeInfo.js";
 import { sceneUpdateNodeProperty } from "./scene/updateNodeProperty.js";
@@ -38,6 +39,7 @@ export const allTools: ToolDefinition<AppContext>[] = [
   runtimeRunScene,
   runtimeExportProject,
   runtimeCaptureScreenshot,
+  runtimeInspectUi,
   sceneGetTree,
   sceneGetNodeInfo,
   sceneUpdateNodeProperty,
