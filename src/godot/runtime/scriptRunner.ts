@@ -49,11 +49,14 @@ export type McpResultParse =
   | { ok: false; reason: "missing" | "invalid_json"; message: string };
 
 /**
- * 从 stdout 里取第一行 `MCP_RESULT_JSON=<json>` 并 JSON.parse。
+ * 从 stdout 里取**最后一行** `MCP_RESULT_JSON=<json>` 并 JSON.parse。
+ * 取最后一行:脚本自己回传的结果一定在最后,前面若出现同前缀的行(例如脚本把要打印的 payload
+ * 先 echo 了一遍,或引擎/日志回显)只应视为干扰,不能抢先当成结果。
  * 缺失前缀或 JSON 非法都返回结构化错误(调用方负责转成 GodotMcpError),不抛异常。
  */
 export function parseMcpResultJson(stdout: string): McpResultParse {
-  const line = stdout.split(/\r?\n/).find((l) => l.startsWith(MCP_RESULT_PREFIX));
+  const lines = stdout.split(/\r?\n/).filter((l) => l.startsWith(MCP_RESULT_PREFIX));
+  const line = lines.at(-1);
   if (line === undefined) {
     return { ok: false, reason: "missing", message: `Engine stdout has no line starting with ${MCP_RESULT_PREFIX}` };
   }

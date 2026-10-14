@@ -48,11 +48,30 @@ test("parseMcpResultJson: 忽略引擎日志,只取带前缀的行", () => {
   assert.deepEqual(r.ok && r.value, { nodeCount: 7, truncated: false });
 });
 
-test("parseMcpResultJson: 兼容 CRLF,且多行时取第一行", () => {
+test("parseMcpResultJson: 兼容 CRLF,且多行时取最后一行", () => {
   const stdout = `${MCP_RESULT_PREFIX}{"a":1}\r\n${MCP_RESULT_PREFIX}{"a":2}\r\n`;
   const r = parseMcpResultJson(stdout);
   assert.equal(r.ok, true);
-  assert.deepEqual(r.ok && r.value, { a: 1 });
+  assert.deepEqual(r.ok && r.value, { a: 2 });
+});
+
+// P2:同前缀的干扰行在前、真实结果在后时,必须取后者(脚本自己回传的结果总在最后)。
+test("parseMcpResultJson: 忽略前面的同前缀干扰行,取后面的真实结果行", () => {
+  const stdout = [
+    `${MCP_RESULT_PREFIX}{"nodeCount":1,"truncated":true}`, // 干扰:回显 / 上一次尝试
+    "ERROR: boom",
+    `${MCP_RESULT_PREFIX}{"nodeCount":7,"truncated":false}`, // 真实结果
+    "some trailing log",
+  ].join("\n");
+  const r = parseMcpResultJson(stdout);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.ok && r.value, { nodeCount: 7, truncated: false });
+});
+
+test("parseMcpResultJson: 最后一行前缀存在但 JSON 非法 → invalid_json(不退回更早的行)", () => {
+  const r = parseMcpResultJson(`${MCP_RESULT_PREFIX}{"a":1}\n${MCP_RESULT_PREFIX}{oops}\n`);
+  assert.equal(r.ok, false);
+  assert.equal(!r.ok && r.reason, "invalid_json");
 });
 
 test("parseMcpResultJson: 缺前缀 → missing", () => {
