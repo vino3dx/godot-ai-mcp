@@ -85,7 +85,7 @@ test("real MCP client (2025-era handshake): tools/list carries JSON Schema, unif
   assert.equal(payload.ok, true);
   assert.equal(payload.data.pong, true);
   assert.equal(payload.data.echo, "hi");
-  assert.equal(payload.data.targetGodot, "4.7.2");
+  assert.equal(payload.data.targetGodot, "4.6.3");
 
   // --- 错误路径必须保持项目统一错误信封(INVALID_ARGUMENT 由 ToolHost 产生,不是 SDK 的格式) ---
   const badArgs = await client.callTool({ name: "utility_ping", arguments: { unknown_param: 1 } });
