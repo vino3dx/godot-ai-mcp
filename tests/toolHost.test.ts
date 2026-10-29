@@ -75,13 +75,13 @@ test("image is emitted as a second MCP content block and kept out of the text JS
 test("minimal real tools through the composition root", async () => {
   const h = buildHost(quiet);
   assert.deepEqual(h.listTools().map((x) => x.name).sort(), [
-    "project_get_config", "project_set_config",
+    "asset_get_info", "asset_list", "project_apply_changes", "project_get_config", "project_input_get", "project_input_update", "project_set_config", "project_validate",
     "resource_add_or_update_external", "resource_get_info", "resource_update_property",
-    "runtime_capture_screenshot", "runtime_check_addon_status", "runtime_export_project", "runtime_get_version", "runtime_inspect_ui", "runtime_run_project", "runtime_run_scene",
-    "scene_add_node", "scene_add_to_group", "scene_connect_signal", "scene_disconnect_signal",
-    "scene_get_node_info", "scene_get_tree", "scene_instantiate_scene", "scene_remove_from_group", "scene_remove_node",
-    "scene_reparent_node", "scene_update_node_property",
-    "script_create", "script_get_info", "script_update_export_default",
+    "runtime_capture_screenshot", "runtime_check_addon_status", "runtime_export_project", "runtime_get_version", "runtime_inspect_ui", "runtime_run_project", "runtime_run_scene", "runtime_visual_debug",
+    "scene_add_node", "scene_add_to_group", "scene_add_visual_node", "scene_analyze_connections", "scene_connect_signal", "scene_disconnect_signal",
+    "scene_find_nodes", "scene_get_connections", "scene_get_node_info", "scene_get_tree", "scene_instantiate_scene", "scene_remove_from_group", "scene_remove_node",
+    "scene_reparent_node", "scene_set_ui_layout", "scene_update_node_property", "scene_update_signal_connection",
+    "script_analyze", "script_create", "script_find_references", "script_get_info", "script_update_export_default", "script_update_function",
     "shader_get_info", "shader_update_uniform_default",
     "utility_ping", "utility_task_status",
   ]);

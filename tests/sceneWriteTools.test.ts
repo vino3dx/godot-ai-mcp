@@ -319,6 +319,32 @@ test("scene_disconnect_signal: 正常路径删除连接;不存在时明确提示
   assert.equal(err(await host.callTool("scene_disconnect_signal", { path: p, sourcePath: "Player", signal: "1bad", targetPath: ".", method: "_x" })).code, "INVALID_ARGUMENT");
 });
 
+test("scene_update_signal_connection: 精确更新、保留 flags、dryRun 与重复保护", async (t) => {
+  const { dir, host } = makeHost(t);
+  const p = "res://scenes/main.tscn";
+  const dry = ok(await host.callTool("scene_update_signal_connection", {
+    path: p, sourcePath: "Player", signal: "ready", targetPath: ".", method: "_on_ready", newMethod: "_on_new", dryRun: true,
+  }));
+  assert.equal(dry["changed"], true);
+  assert.ok(read(dir, "scenes/main.tscn").includes('method="_on_ready"'));
+
+  const updated = ok(await host.callTool("scene_update_signal_connection", {
+    path: p, sourcePath: "Player", signal: "ready", targetPath: ".", method: "_on_ready", newMethod: "_on_new", flags: 1,
+  }));
+  assert.equal(updated["updated"], true);
+  assert.equal((updated["connection"] as { method: string }).method, "_on_new");
+  const text = read(dir, "scenes/main.tscn");
+  assert.ok(text.includes('signal="ready" from="Player" to="." method="_on_new" flags=3'));
+  assert.ok(!text.includes('method="_on_ready"'));
+  assertLossless(text);
+
+  ok(await host.callTool("scene_connect_signal", { path: p, sourcePath: "Player", signal: "tree_exited", targetPath: ".", method: "_other" }));
+  const duplicate = err(await host.callTool("scene_update_signal_connection", {
+    path: p, sourcePath: "Player", signal: "tree_exited", targetPath: ".", method: "_other", newSignal: "ready", newMethod: "_on_new",
+  }));
+  assert.equal(duplicate.code, "INVALID_ARGUMENT");
+});
+
 // ────────────── P2:写工具回报结构化静态前后值(change / created / removed / moved / instantiated) ──────────────
 //
 // 这些值取自文件文本(本套工具不启动引擎),不是布局后的真实值;Control 的真实位置由 runtime_inspect_ui 提供。

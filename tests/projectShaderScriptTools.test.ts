@@ -190,6 +190,24 @@ test("script_update_export_default: change 回报文件静态前后值", async (
   });
 });
 
+test("script_update_function: dryRun、hash 冲突和提交安全", async (t) => {
+  const { dir, host } = makeHost(t);
+  const p = "res://scripts/root.gd";
+  const targetPath = path.join(dir, "scripts", "root.gd");
+  fs.writeFileSync(targetPath, "extends Node\nvar ready_calls := 0\n\nfunc _on_ready() -> void:\n\tready_calls += 1\n\n# keep this footer\n");
+  const before = fs.readFileSync(targetPath, "utf8");
+  const dry = ok(await host.callTool("script_update_function", { path: p, name: "_on_ready", replacement: "func _on_ready() -> void:\n\tprint(\"ok\")", dryRun: true }));
+  assert.equal(dry["changed"], true);
+  assert.equal(fs.readFileSync(targetPath, "utf8"), before);
+  const conflict = err(await host.callTool("script_update_function", { path: p, name: "_on_ready", replacement: "func _on_ready() -> void:\n\tpass", expectedHash: "stale" }));
+  assert.equal(conflict.code, "FILE_CHANGED");
+  const result = ok(await host.callTool("script_update_function", { path: p, name: "_on_ready", replacement: "func _on_ready() -> void:\n\tprint(\"ok\")" }));
+  assert.equal(result["changed"], true);
+  const after = fs.readFileSync(targetPath, "utf8");
+  assert.ok(after.includes("func _on_ready() -> void:\n\tprint(\"ok\")"));
+  assert.ok(after.includes("var ready_calls := 0"));
+});
+
 // ---------- 错误信封 ----------
 
 test("project/shader/script 工具:文件不存在 / 未知参数 / 目标缺失 分别报对应错误", async (t) => {

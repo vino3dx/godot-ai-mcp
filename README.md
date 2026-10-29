@@ -74,7 +74,7 @@ npx -y vinofx-godot-ai-mcp
 That last command starts a **stdio MCP server**. It logs
 
 ```text
-[godot-ai-mcp] INFO MCP server "godot-ai-mcp@1.0.0" listening on stdio, 19 tools exposed
+[godot-ai-mcp] INFO MCP server "godot-ai-mcp@1.1.0" listening on stdio, 30 tools exposed
 ```
 
 to stderr, then waits for JSON-RPC on stdin (Ctrl+C to quit). You normally never run it by hand — your AI client launches it after the configuration below.
@@ -174,12 +174,12 @@ Local-build client config (instead of `npx`):
 | Stage 2 | Core parsers, Scene/Resource services, FileService | Completed |
 | Stage 3 | Project config + GDScript/Shader management | Completed |
 
-**Tool Matrix (19 tools)**
+**Tool Matrix (30 tools)**
 
 | Category | Tools |
 |----------|-------|
 | Utility / Runtime | `utility_ping`, `utility_task_status`, `runtime_get_version`, `runtime_run_project`, `runtime_run_scene`, `runtime_export_project`, `runtime_capture_screenshot` |
-| Scene | `scene_get_tree`, `scene_update_node_property`, `scene_remove_node` |
+| Scene | `scene_get_tree`, `scene_find_nodes`, `scene_update_node_property`, `scene_remove_node` |
 | Resource | `resource_get_info`, `resource_update_property`, `resource_add_or_update_external` |
 | Project / Shader / Script | `project_get_config`, `project_set_config`, `shader_get_info`, `shader_update_uniform_default`, `script_get_info`, `script_update_export_default` |
 
@@ -257,7 +257,7 @@ npx -y vinofx-godot-ai-mcp
 最后这条命令会启动一个 **stdio MCP 服务**，它先输出
 
 ```text
-[godot-ai-mcp] INFO MCP server "godot-ai-mcp@1.0.0" listening on stdio, 19 tools exposed
+[godot-ai-mcp] INFO MCP server "godot-ai-mcp@1.1.0" listening on stdio, 30 tools exposed
 ```
 
 然后等待 stdin 上的 JSON-RPC 消息（Ctrl+C 退出）。通常你不需要手动运行它 —— AI 客户端在完成下面的配置后会自己拉起。
@@ -362,7 +362,7 @@ node dist/src/dev-cli.js call utility_ping '{"echo":"heartbeat"}'
 | 分类 | 工具 |
 |------|------|
 | Utility / Runtime | `utility_ping`、`utility_task_status`、`runtime_get_version`、`runtime_run_project`、`runtime_run_scene`、`runtime_export_project`、`runtime_capture_screenshot` |
-| Scene | `scene_get_tree`、`scene_update_node_property`、`scene_remove_node` |
+| Scene | `scene_get_tree`、`scene_find_nodes`、`scene_update_node_property`、`scene_remove_node` |
 | Resource | `resource_get_info`、`resource_update_property`、`resource_add_or_update_external` |
 | Project / Shader / Script | `project_get_config`、`project_set_config`、`shader_get_info`、`shader_update_uniform_default`、`script_get_info`、`script_update_export_default` |
 

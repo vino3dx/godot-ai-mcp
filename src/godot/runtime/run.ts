@@ -9,8 +9,8 @@
 //
 // CLI 选项拼写已对照 tests/fixtures/godot-help.txt(真实 Godot 4.6.3 `--help` 输出)复验:
 //   --path <directory> / --headless / --quit / --scene <path> / --export-release|--export-debug <preset> <path>。
-import { spawn, type ChildProcess } from "node:child_process";
 import type { Readable } from "node:stream";
+import { ProcessAdapter } from "./processAdapter.js";
 
 /** 单个流的捕获上限,防止失控输出导致无界内存增长。 */
 export const MAX_CAPTURE_BYTES = 256 * 1024;
@@ -47,6 +47,8 @@ export type GodotRunRunner = (
   opts: RunProcessOptions,
 ) => Promise<RunProcessResult>;
 
+const processAdapter = new ProcessAdapter();
+
 /** 运行项目/场景的模式参数(纯数据,构建参数用)。 */
 export interface RunMode {
   headless: boolean;
@@ -79,6 +81,7 @@ export const RUNTIME_FLAGS: readonly string[] = [
   "--quit",
   "--scene",
   "--script",
+  "--check-only",
   "--export-release",
   "--export-debug",
   // ClassDB 快照导出(见 src/godot/api/extensionApi.ts;godot-help.txt:122)
@@ -119,22 +122,17 @@ export function defaultRunRunner(
 ): Promise<RunProcessResult> {
   return new Promise((resolve, reject) => {
     const start = Date.now();
-    let child: ChildProcess;
-    try {
-      child = spawn(file, args as string[], {
-        stdio: ["ignore", "pipe", "pipe"],
-        windowsHide: true,
-        ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }),
-      });
-    } catch (e) {
+    let child;
+    try { child = processAdapter.start(file, args, { cwd: opts.cwd }); }
+    catch (e) {
       reject(e);
       return;
     }
 
     const stdout = { text: "", truncated: false };
     const stderr = { text: "", truncated: false };
-    collect(child.stdout, stdout);
-    collect(child.stderr, stderr);
+    const unsubscribeStdout = child.onStdout((chunk) => collectChunk(chunk, stdout));
+    const unsubscribeStderr = child.onStderr((chunk) => collectChunk(chunk, stderr));
 
     let settled = false;
     let timedOut = false;
@@ -142,7 +140,7 @@ export function defaultRunRunner(
 
     const kill = (): void => {
       timedOut = true;
-      child.kill("SIGKILL");
+      void child.stop("SIGKILL");
     };
 
     if (opts.signal) {
@@ -151,20 +149,21 @@ export function defaultRunRunner(
     }
     timer = setTimeout(kill, opts.timeoutMs);
 
-    child.on("error", (e) => {
+    const unsubscribeError = child.onError((e) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       if (opts.signal) opts.signal.removeEventListener("abort", kill);
+      unsubscribeStdout(); unsubscribeStderr(); unsubscribeError();
       reject(e);
     });
-    child.on("close", (code, signal) => {
+    void child.exited.then(({ exitCode, signal }) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       if (opts.signal) opts.signal.removeEventListener("abort", kill);
       resolve({
-        exitCode: code,
+        exitCode,
         signal,
         timedOut,
         stdout: stdout.text,
@@ -190,4 +189,13 @@ function collect(stream: Readable | null, out: { text: string; truncated: boolea
     }
     out.text = next;
   });
+}
+
+function collectChunk(chunk: Buffer, out: { text: string; truncated: boolean }): void {
+  if (out.truncated) return;
+  const decoder = new TextDecoder("utf-8");
+  const text = decoder.decode(chunk);
+  const next = out.text + text;
+  if (Buffer.byteLength(next, "utf8") > MAX_CAPTURE_BYTES) { out.truncated = true; return; }
+  out.text = next;
 }

@@ -12,6 +12,10 @@ import { ScriptService } from "./scriptService.js";
 import { ShaderService } from "./shaderService.js";
 import { StatusService } from "./statusService.js";
 import { RuntimeService } from "./runtimeService.js";
+import { AssetService } from "./assetService.js";
+import { ProjectValidationService } from "./projectValidationService.js";
+import { BatchFileService } from "./batchFileService.js";
+import { InputMapService } from "./inputMapService.js";
 
 /** 应用上下文:传给每个 Tool handler。新增 Service 在这里挂载。 */
 export interface AppContext {
@@ -39,6 +43,10 @@ export interface AppContext {
   script: ScriptService;
   /** Godot CLI 运行器:启动项目 / 运行场景 / 导出构建(受控进程 + 互斥队列)。 */
   runtime: RuntimeService;
+  assets: AssetService;
+  validation: ProjectValidationService;
+  batchFile: BatchFileService;
+  inputMap: InputMapService;
 }
 
 export function createAppContext(logger: Logger, project: ProjectResolver = new ProjectResolver()): AppContext {
@@ -60,5 +68,9 @@ export function createAppContext(logger: Logger, project: ProjectResolver = new 
     shader: new ShaderService(),
     script: new ScriptService(),
     runtime: new RuntimeService({ godot, project, runQueue }),
+    assets: new AssetService(project),
+    validation: new ProjectValidationService({ godot, project, runQueue }),
+    batchFile: new BatchFileService(new FileService(project), locks),
+    inputMap: new InputMapService(new ProjectService()),
   };
 }

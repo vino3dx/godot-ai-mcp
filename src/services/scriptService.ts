@@ -30,6 +30,10 @@ export interface ScriptInfo {
   exports: ScriptExport[];
 }
 
+export interface ScriptSymbol { name: string; kind: "function" | "variable" | "signal"; line: number; signature?: string; type?: string; exported?: boolean }
+export interface ScriptAnalysis extends ScriptInfo { symbols: ScriptSymbol[] }
+export interface ScriptReference { path: string; line: number; text: string; kind: "definition" | "reference" }
+
 export class ScriptService {
   /** 读取 extends / class_name 与全部 `@export var` 声明。 */
   getScriptInfo(text: string): ScriptInfo {
@@ -45,6 +49,69 @@ export class ScriptService {
       if (exp) info.exports.push(exp);
     }
     return info;
+  }
+
+  analyze(text: string): ScriptAnalysis {
+    const info = this.getScriptInfo(text);
+    const symbols: ScriptSymbol[] = [];
+    const lines = text.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const code = splitGdComment(lines[i]!).code;
+      const trimmed = code.trim();
+      const fn = /^(?:static\s+)?func\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/.exec(trimmed);
+      if (fn) { symbols.push({ name: fn[1]!, kind: "function", line: i + 1, signature: trimmed }); continue; }
+      const sig = /^signal\s+([A-Za-z_]\w*)/.exec(trimmed);
+      if (sig) { symbols.push({ name: sig[1]!, kind: "signal", line: i + 1, signature: trimmed }); continue; }
+      const variable = /^(?:(@export(?:\([^)]*\))?)\s+)?var\s+([A-Za-z_]\w*)\s*(?::\s*([^=]+))?/.exec(trimmed);
+      if (variable) symbols.push({ name: variable[2]!, kind: "variable", line: i + 1, type: variable[3]?.trim(), exported: Boolean(variable[1]), signature: trimmed });
+    }
+    return { ...info, symbols };
+  }
+
+  findReferences(files: readonly { path: string; text: string }[], symbol: string): ScriptReference[] {
+    assertExportName(symbol);
+    const word = new RegExp(`\\b${escapeRegExp(symbol)}\\b`);
+    const out: ScriptReference[] = [];
+    for (const file of files) {
+      const lines = file.text.split(/\r?\n/);
+      for (let i = 0; i < lines.length; i++) {
+        const code = splitGdComment(lines[i]!).code;
+        if (!word.test(code)) continue;
+        const definition = /^\s*(?:(?:static\s+)?func|signal|var|@export)/.test(code);
+        out.push({ path: file.path, line: i + 1, text: lines[i]!, kind: definition ? "definition" : "reference" });
+      }
+    }
+    return out;
+  }
+
+  updateFunction(text: string, name: string, replacement: string): { text: string; functionName: string; startLine: number; endLine: number } {
+    assertExportName(name);
+    if (typeof replacement !== "string" || replacement.trim() === "") throw new GodotMcpError("INVALID_ARGUMENT", "函数替换内容不能为空", { name });
+    const eol = text.includes("\r\n") ? "\r\n" : "\n";
+    const lines = text.split(/\r?\n/);
+    const declarations: Array<{ index: number; kind: "function" | "other" | "class" }> = [];
+    for (let i = 0; i < lines.length; i++) {
+      const code = splitGdComment(lines[i]!).code;
+      if (/^\s*class\s+[A-Za-z_]\w*\s*:\s*$/.test(code)) declarations.push({ index: i, kind: "class" });
+      else if (/^\s*(?:static\s+)?func\s+[A-Za-z_]\w*\s*\(/.test(code)) declarations.push({ index: i, kind: "function" });
+      else if (/^\s*(?:signal|var|const|enum|class_name|extends|@onready\b|@export\b|@tool\b|@icon\b|@static_unload\b)/.test(code)) declarations.push({ index: i, kind: "other" });
+    }
+    const index = declarations.find((d) => d.kind === "function" && new RegExp(`^\\s*(?:static\\s+)?func\\s+${escapeRegExp(name)}\\s*\\(`).test(splitGdComment(lines[d.index]!).code))?.index;
+    if (index === undefined) throw new GodotMcpError("INVALID_ARGUMENT", `脚本中找不到函数: ${name}`, { name });
+    const nextDeclaration = declarations.find((d) => d.index > index);
+    if (nextDeclaration?.kind === "class") throw new GodotMcpError("INVALID_ARGUMENT", "目标函数后出现嵌套类，无法安全确定函数边界", { name, line: nextDeclaration.index + 1 });
+    if (nextDeclaration?.kind === "other") throw new GodotMcpError("INVALID_ARGUMENT", "目标函数后出现其他顶层声明，无法安全确定函数边界", { name, line: nextDeclaration.index + 1 });
+    let end = nextDeclaration?.index ?? lines.length;
+    if (nextDeclaration === undefined) {
+      while (end > index + 1 && lines[end - 1]!.trim() === "") end--;
+      while (end > index + 1 && /^\s*#/.test(lines[end - 1]!)) end--;
+    }
+    const replacementLines = replacement.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n");
+    const replacementDecl = splitGdComment(replacementLines[0]!).code;
+    if (!new RegExp(`^\\s*(?:static\\s+)?func\\s+${escapeRegExp(name)}\\s*\\(`).test(replacementDecl)) throw new GodotMcpError("INVALID_ARGUMENT", "替换内容必须以同名函数声明开头", { name });
+    if (replacementLines.slice(1).some((line) => /^(?:static\s+)?func\s+[A-Za-z_]\w*\s*\(/.test(splitGdComment(line).code))) throw new GodotMcpError("INVALID_ARGUMENT", "替换内容不能包含另一个顶层函数声明", { name });
+    lines.splice(index, end - index, ...replacementLines);
+    return { text: lines.join(eol), functionName: name, startLine: index + 1, endLine: index + replacementLines.length };
   }
 
   /**
@@ -167,3 +234,5 @@ function assertValidValue(name: string, value: string): void {
     throw new GodotMcpError("INVALID_ARGUMENT", `默认值不是合法的表达式(括号或引号不平衡): ${name}`, { name, value });
   }
 }
+
+function escapeRegExp(value: string): string { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }

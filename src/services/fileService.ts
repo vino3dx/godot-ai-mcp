@@ -2,6 +2,7 @@
 // 读:FileGuard 把 res:// 限在项目内 + 同步读 UTF-8 文本 + sha256。
 // 写:复用 core/filesystem/safeWrite(原子写、LF、dryRun、expectedHash 乐观并发)。
 import fs from "node:fs";
+import path from "node:path";
 import { GodotMcpError } from "../core/errors.js";
 import { FileGuard } from "../core/filesystem/fileGuard.js";
 import { assertNotProtected, assertOverwritableExtension } from "../core/filesystem/protectedPaths.js";
@@ -58,6 +59,23 @@ export class FileService {
       throw e;
     }
     return { absPath, resPath: guard.toRes(absPath), text, hash: sha256Hex(text) };
+  }
+
+  listTextFiles(projectPath: string | undefined, extension = ".gd"): ReadResult[] {
+    const guard = this.guard(projectPath);
+    const root = guard.root;
+    const out: ReadResult[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === ".godot" || entry.name === ".git") continue;
+        const abs = path.join(dir, entry.name);
+        if (entry.isDirectory()) { walk(abs); continue; }
+        if (path.extname(entry.name).toLowerCase() !== extension.toLowerCase()) continue;
+        out.push(this.read(projectPath, guard.toRes(abs)));
+      }
+    };
+    walk(root);
+    return out.sort((a, b) => a.resPath.localeCompare(b.resPath));
   }
 
   /** 读 → 就地变换 → 原子写回。edit 返回相同文本时自动跳过写盘(changed=false)。 */

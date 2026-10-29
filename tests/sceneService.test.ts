@@ -30,6 +30,21 @@ text = "Hi"
 
 const service = new SceneService();
 
+test("findNodes: exact node path, subtree and static type categories", () => {
+  assert.deepEqual(service.findNodes(SCENE, { nodePath: "Player" }).nodes.map((n) => n.path), ["Player"]);
+  assert.deepEqual(service.findNodes(SCENE, { nodePath: "/root/Player", includeSubtree: true }).nodes.map((n) => n.path), ["Player", "Player/Sprite", "Player/Label"]);
+  assert.deepEqual(service.findNodes(SCENE, { typeCategory: "control" }).nodes.map((n) => n.name), ["Label"]);
+  assert.deepEqual(service.findNodes(SCENE, { type: "Sprite2D" }).nodes.map((n) => n.path), ["Player/Sprite"]);
+});
+
+test("findNodes: supports combined filters and bounded results", () => {
+  const result = service.findNodes(SCENE, { pathPrefix: "/root/Player", group: "ui", maxResults: 1 });
+  assert.equal(result.total, 1);
+  assert.equal(result.truncated, false);
+  assert.deepEqual(result.nodes.map((n) => n.path), ["Player/Label"]);
+  assert.equal(service.findNodes(SCENE, { type: "Node2D" }).nodes[0]?.path, ".");
+});
+
 /** 最小行级 diff(公共前缀/后缀对齐),用于断言"diff 只有一行"。 */
 function lineDiff(a: string, b: string): { removed: string[]; added: string[] } {
   const la = a.split("\n");

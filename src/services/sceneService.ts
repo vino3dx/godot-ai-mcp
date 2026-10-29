@@ -96,6 +96,21 @@ export interface SceneTree {
   connections: SceneConnection[];
 }
 
+export interface SceneFindOptions {
+  name?: string;
+  type?: string;
+  pathPrefix?: string;
+  group?: string;
+  script?: string;
+  isInstance?: boolean;
+  /** Exact node path; when includeSubtree=true this becomes a subtree query. */
+  nodePath?: string;
+  includeSubtree?: boolean;
+  /** Static category heuristic; does not claim full ClassDB inheritance. */
+  typeCategory?: "control" | "node2d" | "container" | "node";
+  maxResults?: number;
+}
+
 /** scene_add_node 的入参。 */
 export interface AddNodeOptions {
   /** 父节点路径;根为 "."(或 "/root")。 */
@@ -253,7 +268,35 @@ export interface DisconnectSignalResult {
   removed: boolean;
 }
 
+export interface UpdateSignalConnectionOptions {
+  sourcePath: string; signal: string; targetPath: string; method: string;
+  newSourcePath?: string; newSignal?: string; newTargetPath?: string; newMethod?: string; flags?: number;
+}
+export interface UpdateSignalConnectionResult { text: string; updated: boolean; connection?: SceneConnection }
+
 export class SceneService {
+  /** Find nodes without making callers transfer or post-process the full tree. */
+  findNodes(tscnText: string, options: SceneFindOptions): { nodes: SceneNode[]; total: number; truncated: boolean } {
+    const tree = this.getSceneTree(tscnText);
+    const pathPrefix = options.pathPrefix?.replace(/^\/root\/?/, "").replace(/^\.?\//, "");
+    const nodePath = options.nodePath === undefined ? undefined : normalizeNodePath(options.nodePath, "nodePath");
+    const matches = tree.nodes.filter((node) => {
+      if (options.name !== undefined && node.name !== options.name) return false;
+      if (options.type !== undefined && node.type !== options.type) return false;
+      if (pathPrefix !== undefined && !(node.path === pathPrefix || node.path.startsWith(`${pathPrefix}/`))) return false;
+      if (options.group !== undefined && !node.groups.includes(options.group)) return false;
+      if (options.script !== undefined && node.script !== options.script) return false;
+      if (options.isInstance !== undefined && node.isInstance !== options.isInstance) return false;
+      if (nodePath !== undefined && (options.includeSubtree === true
+        ? !(node.path === nodePath || node.path.startsWith(`${nodePath}/`))
+        : node.path !== nodePath)) return false;
+      if (options.typeCategory !== undefined && !matchesTypeCategory(node.type, options.typeCategory)) return false;
+      return true;
+    });
+    const maxResults = options.maxResults ?? 100;
+    return { nodes: matches.slice(0, maxResults), total: matches.length, truncated: matches.length > maxResults };
+  }
+
   /**
    * 提取结构化场景视图:节点树(名称/类型/Path/父节点/脚本/分组/属性/实例)+ `[connection]` 列表。
    * 实例节点只报告本文件里的覆盖属性,不展开子场景内部节点(本读取器不打开其他文件)。
@@ -596,7 +639,14 @@ export class SceneService {
       // 连接的段体为空:4.6.3 引擎写出的 connection 段之间没有空行(节点段才有)
       body: [],
     });
-    return { text: serializeGodotResource(ast), flags: written };
+    const text = serializeGodotResource(ast);
+    const persistedConnection = readConnections(parseGodotResource(text)).find((c) =>
+      c.signal === signal && c.source === from && c.target === to && c.method === method,
+    );
+    if (!persistedConnection) {
+      throw new GodotMcpError("VALIDATION_FAILED", "连接写入后重新解析失败", { signal, from, to, method });
+    }
+    return { text, flags: written };
   }
 
   /** 断开信号:删除匹配的 `[connection ...]` 段;没有该连接时原样返回(removed=false,不报错)。 */
@@ -606,11 +656,65 @@ export class SceneService {
     const ast = parseGodotResource(tscnText);
     const from = normalizeNodePath(o.sourcePath, "sourcePath");
     const to = normalizeNodePath(o.targetPath, "targetPath");
-    const doomed = findConnection(ast, signal, from, to, method);
-    if (!doomed) return { text: tscnText, removed: false };
+    const matches = findConnectionSections(ast, signal, from, to, method);
+    if (matches.length === 0) return { text: tscnText, removed: false };
+    if (matches.length > 1) {
+      throw new GodotMcpError("INVALID_ARGUMENT", "目标连接不唯一，拒绝删除", {
+        count: matches.length, signal, from, to, method,
+      });
+    }
+    const doomed = matches[0]!;
     ast.sections = ast.sections.filter((s) => s !== doomed);
-    return { text: serializeGodotResource(ast), removed: true };
+    const text = serializeGodotResource(ast);
+    const remaining = readConnections(parseGodotResource(text)).some((c) =>
+      c.signal === signal && c.source === from && c.target === to && c.method === method,
+    );
+    if (remaining) {
+      throw new GodotMcpError("VALIDATION_FAILED", "连接删除后重新解析仍存在目标连接", { signal, from, to, method });
+    }
+    return { text, removed: true };
   }
+
+  /** 精确更新一条持久化连接，保留目标段头中的未修改/未知属性，不通过删除再创建实现。 */
+  updateSignalConnection(tscnText: string, o: UpdateSignalConnectionOptions): UpdateSignalConnectionResult {
+    const oldSignal = assertIdentifier(o.signal, "signal");
+    const oldMethod = assertIdentifier(o.method, "method");
+    const ast = parseGodotResource(tscnText);
+    const from = normalizeNodePath(o.sourcePath, "sourcePath");
+    const to = normalizeNodePath(o.targetPath, "targetPath");
+    const matches = findConnectionSections(ast, oldSignal, from, to, oldMethod);
+    if (matches.length === 0) throw new GodotMcpError("INVALID_ARGUMENT", "找不到要更新的连接", { signal: oldSignal, from, to, method: oldMethod });
+    if (matches.length > 1) throw new GodotMcpError("INVALID_ARGUMENT", "目标连接不唯一，拒绝更新", { count: matches.length, signal: oldSignal, from, to, method: oldMethod });
+    if (o.newSourcePath === undefined && o.newSignal === undefined && o.newTargetPath === undefined && o.newMethod === undefined && o.flags === undefined) {
+      throw new GodotMcpError("INVALID_ARGUMENT", "至少需要提供一个 new* 字段或 flags", { param: "update" });
+    }
+    const section = matches[0]!;
+    const nextFrom = o.newSourcePath === undefined ? from : normalizeNodePath(o.newSourcePath, "newSourcePath");
+    const nextTo = o.newTargetPath === undefined ? to : normalizeNodePath(o.newTargetPath, "newTargetPath");
+    requireNodeSection(ast, nextFrom, "newSourcePath"); requireNodeSection(ast, nextTo, "newTargetPath");
+    const nextSignal = o.newSignal === undefined ? oldSignal : assertIdentifier(o.newSignal, "newSignal");
+    const nextMethod = o.newMethod === undefined ? oldMethod : assertIdentifier(o.newMethod, "newMethod");
+    const duplicate = findConnectionSections(ast, nextSignal, nextFrom, nextTo, nextMethod).filter((s) => s !== section);
+    if (duplicate.length > 0) throw new GodotMcpError("INVALID_ARGUMENT", "更新后会产生重复连接", { signal: nextSignal, from: nextFrom, to: nextTo, method: nextMethod });
+    const attrs = section.attributes.map((a) => ({ ...a }));
+    setConnectionHeaderAttr(attrs, "signal", quote(nextSignal)); setConnectionHeaderAttr(attrs, "from", quote(nextFrom)); setConnectionHeaderAttr(attrs, "to", quote(nextTo)); setConnectionHeaderAttr(attrs, "method", quote(nextMethod));
+    if (o.flags !== undefined) {
+      const flags = assertFlags(o.flags); const persisted = flags | CONNECT_PERSIST; const written = (persisted & ~CONNECT_PERSIST) !== 0 ? persisted : 0;
+      if (written === 0) removeConnectionHeaderAttr(attrs, "flags"); else setConnectionHeaderAttr(attrs, "flags", String(written));
+    }
+    section.attributes = attrs; section.headerRaw = headerLine(section.tagName, attrs);
+    const parsed = readConnections(ast).find((c) => c.source === nextFrom && c.signal === nextSignal && c.target === nextTo && c.method === nextMethod);
+    if (!parsed) throw new GodotMcpError("VALIDATION_FAILED", "连接更新后重新解析失败", { signal: nextSignal, from: nextFrom, to: nextTo, method: nextMethod });
+    return { text: serializeGodotResource(ast), updated: true, connection: parsed };
+  }
+}
+
+function matchesTypeCategory(type: string | undefined, category: NonNullable<SceneFindOptions["typeCategory"]>): boolean {
+  if (type === undefined) return false;
+  if (category === "container") return type === "Container" || type.endsWith("Container");
+  if (category === "control") return type === "Control" || type === "Container" || type.endsWith("Container") || ["Button", "CheckBox", "Label", "LineEdit", "TextEdit", "TextureRect", "Panel", "ColorRect", "ProgressBar", "ScrollBar", "Slider"].includes(type);
+  if (category === "node2d") return type === "Node2D" || type.endsWith("2D") || ["Sprite2D", "AnimatedSprite2D", "Camera2D", "TileMap", "TileMapLayer", "Area2D", "CharacterBody2D", "RigidBody2D", "StaticBody2D"].includes(type);
+  return type === "Node" || type.endsWith("2D") || type.endsWith("3D") || type.endsWith("Container") || ["Timer", "AnimationPlayer", "Area2D", "CharacterBody2D", "RigidBody2D", "StaticBody2D"].includes(type);
 }
 
 // ────────────────────────────── 内部工具 ──────────────────────────────
@@ -722,6 +826,8 @@ function newlineOf(ast: GodotResourceAST): GodotLineEnding {
 function headerLine(tag: string, attributes: readonly GodotResourceAttribute[]): string {
   return `[${tag}${attributes.map((a) => ` ${a.name}=${a.value}`).join("")}]`;
 }
+function setConnectionHeaderAttr(attrs: GodotResourceAttribute[], name: string, value: string): void { const found = attrs.find((a) => a.name === name); if (found) found.value = value; else attrs.push({ name, value }); }
+function removeConnectionHeaderAttr(attrs: GodotResourceAttribute[], name: string): void { const i = attrs.findIndex((a) => a.name === name); if (i >= 0) attrs.splice(i, 1); }
 
 /** 新 `[node]` 段的渲染参数。 */
 interface NewNodeSectionOptions {
@@ -1017,6 +1123,9 @@ function findConnection(
     (s) => attrValue(s, "signal") === signal && attrValue(s, "from") === from
       && attrValue(s, "to") === to && attrValue(s, "method") === method,
   );
+}
+function findConnectionSections(ast: GodotResourceAST, signal: string, from: string, to: string, method: string): GodotResourceSection[] {
+  return findGodotResourceSections(ast, "connection").filter((s) => attrValue(s, "signal") === signal && attrValue(s, "from") === from && attrValue(s, "to") === to && attrValue(s, "method") === method);
 }
 
 function describeConnection(signal: string, from: string, to: string, method: string): string {

@@ -10,8 +10,17 @@ import { runtimeExportProject } from "./runtime/exportProject.js";
 import { runtimeCaptureScreenshot } from "./runtime/captureScreenshot.js";
 import { runtimeInspectUi } from "./runtime/inspectUi.js";
 import { runtimeCheckAddonStatus } from "./runtime/checkAddonStatus.js";
+import { runtimeVisualDebug } from "./runtime/visualDebug.js";
 import { sceneGetTree } from "./scene/getTree.js";
 import { sceneGetNodeInfo } from "./scene/getNodeInfo.js";
+import { sceneFindNodes } from "./scene/findNodes.js";
+import { sceneAddVisualNode } from "./scene/addVisualNode.js";
+import { sceneSetUiLayout } from "./scene/setUiLayout.js";
+import { sceneGetConnections } from "./scene/getConnections.js";
+import { sceneAnalyzeConnections } from "./scene/analyzeConnections.js";
+import { sceneUpdateSignalConnection } from "./scene/updateSignalConnection.js";
+import { assetList } from "./asset/list.js";
+import { assetGetInfo } from "./asset/getInfo.js";
 import { sceneUpdateNodeProperty } from "./scene/updateNodeProperty.js";
 import { sceneRemoveNode } from "./scene/removeNode.js";
 import { sceneAddNode } from "./scene/addNode.js";
@@ -26,11 +35,18 @@ import { resourceUpdateProperty } from "./resource/updateProperty.js";
 import { resourceAddOrUpdateExternal } from "./resource/addOrUpdateExternal.js";
 import { projectGetConfig } from "./project/getConfig.js";
 import { projectSetConfig } from "./project/setConfig.js";
+import { projectValidate } from "./project/validate.js";
+import { projectApplyChanges } from "./project/applyChanges.js";
+import { projectInputGet } from "./project/inputGet.js";
+import { projectInputUpdate } from "./project/inputUpdate.js";
 import { shaderGetInfo } from "./shader/getInfo.js";
 import { shaderUpdateUniformDefault } from "./shader/updateUniformDefault.js";
 import { scriptGetInfo } from "./script/getInfo.js";
 import { scriptUpdateExportDefault } from "./script/updateExportDefault.js";
 import { scriptCreate } from "./script/create.js";
+import { scriptAnalyze } from "./script/analyze.js";
+import { scriptFindReferences } from "./script/findReferences.js";
+import { scriptUpdateFunction } from "./script/updateFunction.js";
 
 export const allTools: ToolDefinition<AppContext>[] = [
   utilityPing,
@@ -42,8 +58,15 @@ export const allTools: ToolDefinition<AppContext>[] = [
   runtimeCaptureScreenshot,
   runtimeInspectUi,
   runtimeCheckAddonStatus,
+  runtimeVisualDebug,
   sceneGetTree,
   sceneGetNodeInfo,
+  sceneFindNodes,
+  sceneAddVisualNode,
+  sceneSetUiLayout,
+  sceneGetConnections,
+  sceneAnalyzeConnections,
+  sceneUpdateSignalConnection,
   sceneUpdateNodeProperty,
   sceneRemoveNode,
   sceneAddNode,
@@ -58,9 +81,18 @@ export const allTools: ToolDefinition<AppContext>[] = [
   resourceAddOrUpdateExternal,
   projectGetConfig,
   projectSetConfig,
+  projectValidate,
+  projectApplyChanges,
+  projectInputGet,
+  projectInputUpdate,
   shaderGetInfo,
   shaderUpdateUniformDefault,
   scriptGetInfo,
   scriptUpdateExportDefault,
   scriptCreate,
+  scriptAnalyze,
+  scriptFindReferences,
+  scriptUpdateFunction,
+  assetList,
+  assetGetInfo,
 ];

@@ -60,6 +60,53 @@ test("getScriptInfo: 非 export 的普通 var 与函数不被收集", () => {
   assert.ok(!info.exports.some((e) => e.name === "health"));
 });
 
+test("analyze: 识别函数、变量和信号", () => {
+  const info = service.analyze(SCRIPT + "\nsignal health_changed(value: int)\nfunc take_damage(amount: int) -> void:\n\thealth -= amount\n");
+  assert.deepEqual(info.symbols.filter((s) => ["signal", "function"].includes(s.kind)), [
+    { name: "_physics_process", kind: "function", line: 13, signature: "func _physics_process(delta: float) -> void:" },
+    { name: "health_changed", kind: "signal", line: 16, signature: "signal health_changed(value: int)" },
+    { name: "take_damage", kind: "function", line: 17, signature: "func take_damage(amount: int) -> void:" },
+  ]);
+  assert.equal(info.symbols.find((s) => s.name === "health")?.kind, "variable");
+});
+
+test("findReferences: 返回定义与引用并忽略注释", () => {
+  const refs = service.findReferences([{ path: "res://a.gd", text: "var speed = 1\nfunc go():\n\tprint(speed) # speed\n" }], "speed");
+  assert.deepEqual(refs.map((r) => [r.line, r.kind]), [[1, "definition"], [3, "reference"]]);
+});
+
+test("updateFunction: 只替换目标函数,函数外内容不变", () => {
+  const input = "extends Node\n\nfunc a():\n\treturn 1\n\nfunc b():\n\treturn 2\n\nvar tail = 3\n";
+  const out = service.updateFunction(input, "a", "func a():\n\treturn 9").text;
+  assert.match(out, /func a\(\):\n\treturn 9/);
+  assert.match(out, /func b\(\):\n\treturn 2/);
+  assert.match(out, /var tail = 3/);
+  assert.throws(() => service.updateFunction(input, "missing", "func missing():\n\tpass"), isCode("INVALID_ARGUMENT"));
+});
+
+test("updateFunction: 相邻函数和文件末尾函数边界精确", () => {
+  const adjacent = "func a():\n\tpass\nfunc b():\n\tpass\n";
+  const a = service.updateFunction(adjacent, "a", "func a():\n\treturn 1").text;
+  assert.equal(a, "func a():\n\treturn 1\nfunc b():\n\tpass\n");
+  const eof = "func only():\n\tpass";
+  assert.equal(service.updateFunction(eof, "only", "func only():\n\treturn 2").text, "func only():\n\treturn 2");
+});
+
+test("updateFunction: 忽略函數注释中的 func,保留 CRLF 和尾随顶层注释", () => {
+  const input = "func a():\r\n\t# func fake():\r\n\tpass\r\n# file note\r\n";
+  const result = service.updateFunction(input, "a", "func a():\n\treturn 3").text;
+  assert.equal(result, "func a():\r\n\treturn 3\r\n# file note\r\n");
+});
+
+test("updateFunction: 遇到嵌套类、异步函数和其他顶层声明采取安全边界", () => {
+  const nested = "func a():\n\tpass\nclass Inner:\n\tfunc go():\n\t\tpass\n";
+  assert.throws(() => service.updateFunction(nested, "a", "func a():\n\treturn 1"), isCode("INVALID_ARGUMENT"));
+  const between = "func a():\n\tpass\nvar marker = 1\nfunc b():\n\tpass\n";
+  assert.throws(() => service.updateFunction(between, "a", "func a():\n\treturn 1"), isCode("INVALID_ARGUMENT"));
+  const asyncFn = "func a():\n\tpass\nfunc b():\n\tawait get_tree().process_frame\n";
+  assert.equal(service.updateFunction(asyncFn, "b", "func b():\n\tawait get_tree().process_frame\n\treturn").text.includes("func a():\n\tpass"), true);
+});
+
 // ---------- updateExportDefault ----------
 
 test("updateExportDefault: 改已有默认值只动该行,其余字节不变", () => {
