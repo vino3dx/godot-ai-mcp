@@ -1,7 +1,7 @@
 # godot-ai-mcp
 ![img](./assets/Cover.jpg)
 
-[![npm version](https://img.shields.io/npm/v/vinofx-godot-ai-mcp.svg)](https://www.npmjs.com/package/vinofx-godot-ai-mcp)
+[![npm version](https://img.shields.io/npm/v/vino-godot-mcp.svg)](https://www.npmjs.com/package/vino-godot-mcp)
 [![Godot](https://img.shields.io/badge/Godot-4.6.3+-478CBF?logo=godotengine&logoColor=white)](https://godotengine.org/)
 [![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-8A2BE2)](https://modelcontextprotocol.io/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -45,13 +45,13 @@ Requires Node.js >= 22.
 Install into your project:
 
 ```bash
-npm i vinofx-godot-ai-mcp
+npm i vino-godot-mcp
 ```
 
 Expected output:
 
 ```text
-$ npm i vinofx-godot-ai-mcp
+$ npm i vino-godot-mcp
 
 added 1 package, and audited 19 packages in 3s
 
@@ -66,13 +66,13 @@ Package names, counts and timings vary by environment. As long as there is no er
 Install globally to get the `godot-ai-mcp` command on your PATH:
 
 ```bash
-npm i -g vinofx-godot-ai-mcp
+npm i -g vino-godot-mcp
 ```
 
 Run it once without installing anything:
 
 ```bash
-npx -y vinofx-godot-ai-mcp
+npx -y vino-godot-mcp
 ```
 
 That last command starts a **stdio MCP server**. It logs
@@ -92,7 +92,7 @@ Add this to your AI client's MCP config (`.cursor/mcp.json`, CodeBuddy, Cline, �
   "mcpServers": {
     "godot-ai-mcp": {
       "command": "npx",
-      "args": ["-y", "vinofx-godot-ai-mcp"],
+      "args": ["-y", "vino-godot-mcp"],
       "env": {
         "GODOT_PATH": "<absolute path to the Godot console executable>",
         "GODOT_AI_MCP_LOG": "debug"
@@ -108,7 +108,7 @@ Add this to your AI client's MCP config (`.cursor/mcp.json`, CodeBuddy, Cline, �
 | `GODOT_AI_MCP_GROUPS` | no | Comma-separated domain filter exposing fewer tools, e.g. `project,shader` (`src/mcp/registry/toolRegistry.ts`). |
 | `GODOT_AI_MCP_LOG` | no | `debug` / `info` / `warn` / `error`; default `info` (`src/core/logger.ts`). |
 
-> **Windows note**: if your client cannot find `npx`, use `"command": "npx.cmd"`, or `"command": "cmd"` with `"args": ["/c", "npx", "-y", "vinofx-godot-ai-mcp"]`.
+> **Windows note**: if your client cannot find `npx`, use `"command": "npx.cmd"`, or `"command": "cmd"` with `"args": ["/c", "npx", "-y", "vino-godot-mcp"]`.
 
 > **🔴 Recommended**: using the console version of Godot is recommended, as it significantly improves AI operational efficiency.
 
@@ -228,13 +228,13 @@ MCP Layer → Tool Layer → Service Layer → Core/Parser → FileSystem
 安装到当前项目：
 
 ```bash
-npm i vinofx-godot-ai-mcp
+npm i vino-godot-mcp
 ```
 
 预期输出：
 
 ```text
-$ npm i vinofx-godot-ai-mcp
+$ npm i vino-godot-mcp
 
 added 1 package, and audited 19 packages in 3s
 
@@ -249,13 +249,13 @@ found 0 vulnerabilities
 全局安装后，可在任意位置直接使用 `godot-ai-mcp` 命令：
 
 ```bash
-npm i -g vinofx-godot-ai-mcp
+npm i -g vino-godot-mcp
 ```
 
 不安装、直接运行一次：
 
 ```bash
-npx -y vinofx-godot-ai-mcp
+npx -y vino-godot-mcp
 ```
 
 最后这条命令会启动一个 **stdio MCP 服务**，它先输出
@@ -275,7 +275,7 @@ npx -y vinofx-godot-ai-mcp
   "mcpServers": {
     "godot-ai-mcp": {
       "command": "npx",
-      "args": ["-y", "vinofx-godot-ai-mcp"],
+      "args": ["-y", "vino-godot-mcp"],
       "env": {
         "GODOT_PATH": "<你的 Godot 控制台版可执行文件的绝对路径>",
         "GODOT_AI_MCP_LOG": "debug"
@@ -291,7 +291,7 @@ npx -y vinofx-godot-ai-mcp
 | `GODOT_AI_MCP_GROUPS` | 否 | 逗号分隔的领域过滤，只向客户端暴露部分工具，例如 `project,shader`（`src/mcp/registry/toolRegistry.ts`）。 |
 | `GODOT_AI_MCP_LOG` | 否 | `debug` / `info` / `warn` / `error`，默认 `info`（`src/core/logger.ts`）。 |
 
-> **Windows 提示**：如果客户端找不到 `npx`，可改为 `"command": "npx.cmd"`，或用 `"command": "cmd"` 搭配 `"args": ["/c", "npx", "-y", "vinofx-godot-ai-mcp"]`。
+> **Windows 提示**：如果客户端找不到 `npx`，可改为 `"command": "npx.cmd"`，或用 `"command": "cmd"` 搭配 `"args": ["/c", "npx", "-y", "vino-godot-mcp"]`。
 
 > **🔴 推荐**：建议使用控制台（Console）版本的 Godot，能显著提升 AI 操作效率。
 
