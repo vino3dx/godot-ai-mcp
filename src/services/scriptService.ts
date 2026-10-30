@@ -28,25 +28,38 @@ export interface ScriptInfo {
   /** `class_name X` 的类名;缺失时为 undefined。 */
   className?: string;
   exports: ScriptExport[];
+  annotations: string[];
+  signals: Array<{ name: string; parameters: Array<{ name: string; type?: string; default?: string }> }>;
+  enums: Array<{ name: string; values: Array<{ name: string; value?: string }> }>;
+  constants: Array<{ name: string; type?: string; value?: string }>;
 }
 
-export interface ScriptSymbol { name: string; kind: "function" | "variable" | "signal"; line: number; signature?: string; type?: string; exported?: boolean }
-export interface ScriptAnalysis extends ScriptInfo { symbols: ScriptSymbol[] }
+export interface ScriptMethodParameter { name: string; type?: string; default?: string }
+export interface ScriptMethod { name: string; line: number; static: boolean; parameters: ScriptMethodParameter[]; returnType?: string; signature: string }
+export interface ScriptSymbol { name: string; kind: "function" | "variable" | "signal"; line: number; signature?: string; type?: string; exported?: boolean; annotation?: string }
+export interface ScriptAnalysis extends ScriptInfo { symbols: ScriptSymbol[]; methods: ScriptMethod[] }
 export interface ScriptReference { path: string; line: number; text: string; kind: "definition" | "reference" }
 
 export class ScriptService {
   /** 读取 extends / class_name 与全部 `@export var` 声明。 */
   getScriptInfo(text: string): ScriptInfo {
-    const info: ScriptInfo = { exports: [] };
+    const info: ScriptInfo = { exports: [], annotations: [], signals: [], enums: [], constants: [] };
     for (const piece of splitLines(text)) {
       const line = splitGdComment(piece.text).code.trim();
       if (line === "") continue;
+      if (/^@(tool|icon|static_unload)\b/.test(line)) { info.annotations.push(line); continue; }
       const ext = /^extends\s+(\S+)/.exec(line);
       if (ext) { info.extends = ext[1]; continue; }
       const cn = /^class_name\s+([A-Za-z_]\w*)/.exec(line);
       if (cn) { info.className = cn[1]; continue; }
       const exp = parseExport(line);
       if (exp) info.exports.push(exp);
+      const signal = parseSignal(line);
+      if (signal) info.signals.push(signal);
+      const enumeration = parseEnum(line);
+      if (enumeration) info.enums.push(enumeration);
+      const constant = parseConst(line);
+      if (constant) info.constants.push(constant);
     }
     return info;
   }
@@ -54,18 +67,19 @@ export class ScriptService {
   analyze(text: string): ScriptAnalysis {
     const info = this.getScriptInfo(text);
     const symbols: ScriptSymbol[] = [];
+    const methods: ScriptMethod[] = [];
     const lines = text.split(/\r?\n/);
     for (let i = 0; i < lines.length; i++) {
       const code = splitGdComment(lines[i]!).code;
       const trimmed = code.trim();
       const fn = /^(?:static\s+)?func\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/.exec(trimmed);
-      if (fn) { symbols.push({ name: fn[1]!, kind: "function", line: i + 1, signature: trimmed }); continue; }
+      if (fn) { const method = parseMethod(trimmed, i + 1); methods.push(method); symbols.push({ name: fn[1]!, kind: "function", line: i + 1, signature: trimmed }); continue; }
       const sig = /^signal\s+([A-Za-z_]\w*)/.exec(trimmed);
       if (sig) { symbols.push({ name: sig[1]!, kind: "signal", line: i + 1, signature: trimmed }); continue; }
       const variable = /^(?:(@export(?:\([^)]*\))?)\s+)?var\s+([A-Za-z_]\w*)\s*(?::\s*([^=]+))?/.exec(trimmed);
       if (variable) symbols.push({ name: variable[2]!, kind: "variable", line: i + 1, type: variable[3]?.trim(), exported: Boolean(variable[1]), signature: trimmed });
     }
-    return { ...info, symbols };
+    return { ...info, symbols, methods };
   }
 
   findReferences(files: readonly { path: string; text: string }[], symbol: string): ScriptReference[] {
@@ -166,6 +180,45 @@ function parseExport(line: string): ScriptExport | null {
     if (t !== "") exp.type = t;
   }
   return exp;
+}
+
+function parseSignal(line: string): ScriptInfo["signals"][number] | null {
+  const m = /^signal\s+([A-Za-z_]\w*)\s*(?:\((.*)\))?$/.exec(line);
+  if (!m) return null;
+  return { name: m[1]!, parameters: parseParameters(m[2] ?? "") };
+}
+
+function parseEnum(line: string): ScriptInfo["enums"][number] | null {
+  const m = /^enum\s+([A-Za-z_]\w*)\s*\{(.*)\}$/.exec(line);
+  if (!m) return null;
+  return { name: m[1]!, values: splitComma(m[2]!).map((item) => {
+    const [name, value] = item.split("=", 2).map((v) => v.trim());
+    return value === undefined ? { name: name! } : { name: name!, value };
+  }) };
+}
+
+function parseConst(line: string): ScriptInfo["constants"][number] | null {
+  const m = /^const\s+([A-Za-z_]\w*)\s*(?::\s*([^=]+))?\s*(?:=\s*(.*))?$/.exec(line);
+  return m ? { name: m[1]!, ...(m[2] ? { type: m[2].trim() } : {}), ...(m[3] ? { value: m[3].trim() } : {}) } : null;
+}
+
+function parseMethod(line: string, lineNumber: number): ScriptMethod {
+  const m = /^(static\s+)?func\s+([A-Za-z_]\w*)\s*\((.*)\)\s*(?:->\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?))?/.exec(line);
+  return { name: m?.[2] ?? "", line: lineNumber, static: Boolean(m?.[1]), parameters: parseParameters(m?.[3] ?? ""), ...(m?.[4] ? { returnType: m[4] } : {}), signature: line };
+}
+
+function parseParameters(raw: string): ScriptMethodParameter[] {
+  return splitComma(raw).filter(Boolean).map((item) => {
+    const eq = item.indexOf("="); const left = (eq < 0 ? item : item.slice(0, eq)).trim(); const def = eq < 0 ? undefined : item.slice(eq + 1).trim();
+    const colon = left.indexOf(":"); const name = (colon < 0 ? left : left.slice(0, colon)).trim(); const type = colon < 0 ? undefined : left.slice(colon + 1).trim();
+    return { name, ...(type ? { type } : {}), ...(def ? { default: def } : {}) };
+  });
+}
+
+function splitComma(raw: string): string[] {
+  const out: string[] = []; let start = 0; let depth = 0; let quote = false;
+  for (let i = 0; i < raw.length; i++) { const c = raw[i]!; if (c === '"' && raw[i - 1] !== "\\") quote = !quote; if (quote) continue; if ("([{<".includes(c)) depth++; else if (")]}>".includes(c)) depth--; else if (c === "," && depth === 0) { out.push(raw.slice(start, i).trim()); start = i + 1; } }
+  if (raw.slice(start).trim()) out.push(raw.slice(start).trim()); return out;
 }
 
 /** 重写目标行的默认值;保留前导空白与尾随 `#` 注释(含其前分隔空白)。 */
