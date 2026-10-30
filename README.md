@@ -7,9 +7,9 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Standalone MCP Server for Godot 4.6.3+**  
-Read & write `.tscn` / `.tres` / `project.godot` / `.gdshader` / `.gd` files directly via pure-text AST parsers.  
-**No need to launch the Godot editor for daily development.**  
+**AI-oriented semantic operation MCP for Godot 4.6.3+**
+The product goal is to let an agent understand, inspect, create, modify, organize, and validate Godot scenes, nodes, signals, groups, resources, and project settings.
+The current implementation provides a safe offline file channel; an authoritative Godot-native object bridge is the next architectural milestone.
 Runtime Adapter only calls Godot CLI when engine-dependent capabilities are required.
 
 ---
@@ -25,13 +25,16 @@ Runtime Adapter only calls Godot CLI when engine-dependent capabilities are requ
 
 ### Core Features
 
-1. **Lossless Round-trip Parsing**  
+1. **Godot semantic operations (product direction)**
+   Scene/node structure, signal/group relationships, resources, project settings, scripts, shaders, and validation are the primary domains. The native bridge design and current boundaries are documented in [`docs/GODOT_NATIVE_BRIDGE.md`](docs/GODOT_NATIVE_BRIDGE.md).
+
+2. **Lossless Round-trip Parsing**
    The core parser strictly preserves unmodified content, comments, whitespace, `sub_resource`, `ext_resource`, and `UID` identifiers when reading and modifying Godot text resources.
 
-2. **Background Auto-Management**  
+3. **Background Auto-Management**
    Based on the standard MCP (Model Context Protocol). Once configured in an AI client, the client automatically starts and manages the Node.js process in the background. No manual terminal launch required.
 
-3. **Natural Language = Project Control**  
+4. **Natural Language = Godot Development Control**
    After setup, simply chat with the AI (e.g. “Read the current project config and parse the main scene tree”). The AI will automatically operate the project through MCP tools.
 
 ### Install from npm (recommended)
