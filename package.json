@@ -49,6 +49,7 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "^2.2.0"
+    "@modelcontextprotocol/server": "^2.2.0",
+    "vinofx-godot-ai-mcp": "^1.2.0"
   }
 }
