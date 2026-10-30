@@ -17,6 +17,10 @@ import { ProjectValidationService } from "./projectValidationService.js";
 import { BatchFileService } from "./batchFileService.js";
 import { InputMapService } from "./inputMapService.js";
 import { RuntimeSessionManager } from "./runtimeSessionManager.js";
+import { NativeBridgeService } from "./nativeBridgeService.js";
+import { NativeBridgeClient } from "../godot/bridge/client.js";
+import path from "node:path";
+import { GdscriptProjectService } from "./gdscriptProjectService.js";
 
 /** 应用上下文:传给每个 Tool handler。新增 Service 在这里挂载。 */
 export interface AppContext {
@@ -46,6 +50,8 @@ export interface AppContext {
   runtime: RuntimeService;
   /** Persistent Godot sessions; intentionally independent from runQueue. */
   runtimeSessions: RuntimeSessionManager;
+  nativeBridge: NativeBridgeService;
+  gdscriptProject: GdscriptProjectService;
   assets: AssetService;
   validation: ProjectValidationService;
   batchFile: BatchFileService;
@@ -56,6 +62,9 @@ export function createAppContext(logger: Logger, project: ProjectResolver = new 
   const locks = new LockManager();
   const runQueue = new TaskQueue(locks);
   const godot = new GodotCliService();
+  const file = new FileService(project);
+  const scene = new SceneService();
+  const script = new ScriptService();
   return {
     logger,
     locks,
@@ -64,14 +73,16 @@ export function createAppContext(logger: Logger, project: ProjectResolver = new 
     project,
     godot,
     godotApi: new GodotApiService({ godot, project, runQueue }),
-    file: new FileService(project),
-    scene: new SceneService(),
+    file,
+    scene,
     resource: new ResourceService(),
     projectConfig: new ProjectService(),
     shader: new ShaderService(),
-    script: new ScriptService(),
+    script,
     runtime: new RuntimeService({ godot, project, runQueue }),
     runtimeSessions: new RuntimeSessionManager(),
+    nativeBridge: new NativeBridgeService((root) => new NativeBridgeClient({ descriptorPath: process.env["GODOT_AI_MCP_BRIDGE_FILE"] ?? path.join(root, ".godot-ai-mcp", "bridge.json") })),
+    gdscriptProject: new GdscriptProjectService(file, script, scene),
     assets: new AssetService(project),
     validation: new ProjectValidationService({ godot, project, runQueue }),
     batchFile: new BatchFileService(new FileService(project), locks),
