@@ -61,13 +61,13 @@ test("real MCP client (2025-era handshake): tools/list carries JSON Schema, unif
   // --- tools/list:验证 JSON Schema 真的上了线(这是旧占位适配层做不到的) ---
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((x) => x.name).sort(), [
-    "asset_get_info", "asset_list", "project_apply_changes", "project_get_config", "project_input_get", "project_input_update", "project_set_config", "project_validate",
+    "asset_get_info", "asset_list", "class_get_info", "class_search", "class_validate_member", "project_apply_changes", "project_capabilities", "project_get_config", "project_input_get", "project_input_update", "project_set_config", "project_validate",
     "resource_add_or_update_external", "resource_get_info", "resource_update_property",
     "runtime_capture_screenshot", "runtime_check_addon_status", "runtime_export_project", "runtime_get_session", "runtime_get_version", "runtime_inspect_ui", "runtime_read_session_logs", "runtime_run_project", "runtime_run_scene", "runtime_start_session", "runtime_stop_session", "runtime_visual_debug",
     "scene_add_node", "scene_add_to_group", "scene_add_visual_node", "scene_analyze_connections", "scene_connect_signal", "scene_disconnect_signal",
     "scene_find_nodes", "scene_get_connections", "scene_get_node_info", "scene_get_tree", "scene_instantiate_scene", "scene_remove_from_group", "scene_remove_node",
     "scene_reparent_node", "scene_set_ui_layout", "scene_update_node_property", "scene_update_signal_connection",
-    "script_analyze", "script_create", "script_find_references", "script_get_info", "script_update_export_default", "script_update_function",
+    "script_analyze", "script_create", "script_find_references", "script_get_info", "script_project_graph", "script_update_export_default", "script_update_function",
     "shader_get_info", "shader_update_uniform_default",
     "utility_ping", "utility_task_status",
   ]);
@@ -118,13 +118,13 @@ test("real MCP client (modern 2026-07-28 era): server/discover path works too", 
   assert.equal(client.getProtocolEra(), "modern");
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((x) => x.name).sort(), [
-    "asset_get_info", "asset_list", "project_apply_changes", "project_get_config", "project_input_get", "project_input_update", "project_set_config", "project_validate",
+    "asset_get_info", "asset_list", "class_get_info", "class_search", "class_validate_member", "project_apply_changes", "project_capabilities", "project_get_config", "project_input_get", "project_input_update", "project_set_config", "project_validate",
     "resource_add_or_update_external", "resource_get_info", "resource_update_property",
     "runtime_capture_screenshot", "runtime_check_addon_status", "runtime_export_project", "runtime_get_session", "runtime_get_version", "runtime_inspect_ui", "runtime_read_session_logs", "runtime_run_project", "runtime_run_scene", "runtime_start_session", "runtime_stop_session", "runtime_visual_debug",
     "scene_add_node", "scene_add_to_group", "scene_add_visual_node", "scene_analyze_connections", "scene_connect_signal", "scene_disconnect_signal",
     "scene_find_nodes", "scene_get_connections", "scene_get_node_info", "scene_get_tree", "scene_instantiate_scene", "scene_remove_from_group", "scene_remove_node",
     "scene_reparent_node", "scene_set_ui_layout", "scene_update_node_property", "scene_update_signal_connection",
-    "script_analyze", "script_create", "script_find_references", "script_get_info", "script_update_export_default", "script_update_function",
+    "script_analyze", "script_create", "script_find_references", "script_get_info", "script_project_graph", "script_update_export_default", "script_update_function",
     "shader_get_info", "shader_update_uniform_default",
     "utility_ping", "utility_task_status",
   ]);
