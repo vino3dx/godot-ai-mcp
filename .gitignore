@@ -5,3 +5,5 @@ dist/
 .workbuddy/
 .godot-ai-mcp/
 .godot-ai-mcp-log/
+# Godot 编辑器缓存(每个工程下的 .godot/,含二进制缓存,不入库)
+.godot/
