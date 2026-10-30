@@ -21,6 +21,7 @@ import {
   EXTENSION_API_FILE,
   parseExtensionApi,
   type ApiEnum,
+  type ApiMethod,
   type ApiSignal,
   type ExtensionApi,
 } from "../godot/api/extensionApi.js";
@@ -52,7 +53,13 @@ export interface ClassInfoProperty {
   name: string;
   type: string;
   enum?: ApiEnum;
+  getter?: string;
+  setter?: string;
+  declaredBy?: string;
+  inherited?: boolean;
 }
+
+export interface ClassInfoMethod extends ApiMethod { declaredBy?: string; inherited?: boolean }
 
 export interface ClassInfo {
   nodeType: string;
@@ -64,6 +71,13 @@ export interface ClassInfo {
   /** 该类自身声明的属性(未合并继承属性;需要继承的请按 inheritance 逐级取)。 */
   properties: ClassInfoProperty[];
   signals: ApiSignal[];
+  methods?: ClassInfoMethod[];
+  enums?: ApiEnum[];
+  constants?: Array<{ name: string; value: number; declaredBy?: string; inherited?: boolean }>;
+  allProperties?: ClassInfoProperty[];
+  allMethods?: ClassInfoMethod[];
+  allSignals?: Array<ApiSignal & { declaredBy?: string; inherited?: boolean }>;
+  allEnums?: Array<ApiEnum & { declaredBy?: string; inherited?: boolean }>;
   source: {
     /** `godot --version` 原文(缓存键)。 */
     engineVersion: string;
@@ -73,6 +87,7 @@ export interface ClassInfo {
     cacheFile: string;
     /** 本次是否命中已有缓存(未启动引擎)。 */
     fromCache: boolean;
+    verificationStatus: "engine_dump";
   };
 }
 
@@ -80,6 +95,12 @@ interface LoadedApi {
   api: ExtensionApi;
   cacheFile: string;
   fromCache: boolean;
+}
+
+function collectMembers(api: ExtensionApi, className: string): { properties: ClassInfoProperty[]; methods: ClassInfoMethod[]; signals: Array<ApiSignal & { declaredBy?: string; inherited?: boolean }>; enums: Array<ApiEnum & { declaredBy?: string; inherited?: boolean }> } {
+  const properties: ClassInfoProperty[] = []; const methods: ClassInfoMethod[] = []; const signals: Array<ApiSignal & { declaredBy?: string; inherited?: boolean }> = []; const enums: Array<ApiEnum & { declaredBy?: string; inherited?: boolean }> = []; const seen = new Set<string>(); let current: string | undefined = className;
+  while (current && !seen.has(current)) { seen.add(current); const c = api.classes.get(current); if (!c) break; for (const p of c.properties) { if (!properties.some((x) => x.name === p.name)) properties.push({ name: p.name, type: p.type, ...(p.getter ? { getter: p.getter } : {}), ...(p.setter ? { setter: p.setter } : {}), declaredBy: current, inherited: current !== className }); } for (const m of c.methods) if (!methods.some((x) => x.name === m.name)) methods.push({ ...m, declaredBy: current, inherited: current !== className }); for (const s of c.signals) if (!signals.some((x) => x.name === s.name)) signals.push({ ...s, declaredBy: current, inherited: current !== className }); for (const e of c.enums) if (!enums.some((x) => x.name === e.name)) enums.push({ ...e, declaredBy: current, inherited: current !== className }); current = c.inherits; }
+  return { properties, methods, signals, enums };
 }
 
 export class GodotApiService {
@@ -108,15 +129,17 @@ export class GodotApiService {
 
     const properties = cls.properties.map((p) => {
       const resolved = p.enumName === undefined ? undefined : this.resolveEnum(loaded.api, p.enumName);
-      return resolved === undefined ? { name: p.name, type: p.type } : { name: p.name, type: p.type, enum: resolved };
+      return { name: p.name, type: p.type, ...(p.getter ? { getter: p.getter } : {}), ...(p.setter ? { setter: p.setter } : {}), ...(resolved ? { enum: resolved } : {}), declaredBy: cls.name, inherited: false };
     });
     const source: ClassInfo["source"] = {
       engineVersion: await this.engineVersion(),
       cacheFile: loaded.cacheFile,
       fromCache: loaded.fromCache,
+      verificationStatus: "engine_dump",
     };
     if (loaded.api.versionFullName !== undefined) source.apiVersionFullName = loaded.api.versionFullName;
 
+    const all = collectMembers(loaded.api, cls.name);
     return {
       nodeType: cls.name,
       apiType: cls.apiType,
@@ -124,8 +147,25 @@ export class GodotApiService {
       inheritance: inheritanceOf(loaded.api, cls.name),
       properties,
       signals: cls.signals,
+      methods: cls.methods.map((m) => ({ ...m, declaredBy: cls.name, inherited: false })),
+      enums: cls.enums,
+      constants: cls.constants.map((c) => ({ ...c, declaredBy: cls.name, inherited: false })),
+      allProperties: all.properties,
+      allMethods: all.methods,
+      allSignals: all.signals,
+      allEnums: all.enums,
       source,
     };
+  }
+
+  async searchClasses(projectPath: string | undefined, query: string, limit = 100): Promise<{ name: string; inherits?: string; apiType: string; isInstantiable: boolean }[]> {
+    const loaded = await this.load(this.opts.project.resolve(projectPath)); const q = query.trim().toLowerCase();
+    return [...loaded.api.classes.values()].filter((c) => !q || c.name.toLowerCase().includes(q)).slice(0, Math.max(1, Math.min(limit, 500))).map((c) => ({ name: c.name, ...(c.inherits ? { inherits: c.inherits } : {}), apiType: c.apiType, isInstantiable: c.isInstantiable }));
+  }
+
+  async validateMember(projectPath: string | undefined, className: string, member: { property?: string; method?: string; signal?: string; enumMember?: string }): Promise<{ className: string; exists: boolean; member: typeof member; source: ClassInfo["source"] }> {
+    const info = await this.getClassInfo(projectPath, className); const found = member.property ? info.allProperties?.some((p) => p.name === member.property) : member.method ? info.allMethods?.some((m) => m.name === member.method) : member.signal ? info.allSignals?.some((s) => s.name === member.signal) : false;
+    return { className, exists: Boolean(found), member, source: info.source };
   }
 
   /** `<项目根>/.godot-ai-mcp/extension-api/<版本>.json`(对外暴露给测试与文档)。 */
