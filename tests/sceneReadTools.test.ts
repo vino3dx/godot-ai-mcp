@@ -235,6 +235,8 @@ test("parseExtensionApi: 类/继承/属性类型/枚举关联/信号签名;缺�
     { name: "changed", arguments: [] },                                          // 无参信号没有 arguments 键
     { name: "moved", arguments: [{ name: "delta", type: "Vector2" }] },
   ]);
+  assert.deepEqual(widget?.methods.find((m) => m.name === "set_mode"), { name: "set_mode", arguments: [{ name: "mode", type: "enum::Widget.Mode" }], isStatic: false, isVararg: false });
+  assert.deepEqual(widget?.properties.find((p) => p.name === "mode")?.getter, "get_mode");
   assert.deepEqual(api.globalEnums.get("GlobalMode")?.values, [{ name: "GLOBAL_A", value: 0 }]);
 });
 
