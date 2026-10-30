@@ -55,7 +55,12 @@ export interface ApiProperty {
   type: string;
   /** 由 setter 参数类型 `enum::<Class>.<Enum>` / `bitfield::…` 推出的枚举名;推不出时缺省(不猜)。 */
   enumName?: string;
+  getter?: string;
+  setter?: string;
 }
+
+export interface ApiMethodArgument { name: string; type?: string; defaultValue?: string }
+export interface ApiMethod { name: string; returnType?: string; arguments: ApiMethodArgument[]; isStatic: boolean; isVararg: boolean }
 
 export interface ApiClass {
   name: string;
@@ -68,6 +73,8 @@ export interface ApiClass {
   properties: ApiProperty[];
   signals: ApiSignal[];
   enums: ApiEnum[];
+  methods: ApiMethod[];
+  constants: Array<{ name: string; value: number }>;
 }
 
 export interface ExtensionApi {
@@ -111,6 +118,8 @@ export function parseExtensionApi(raw: string): ExtensionApi {
       isInstantiable: c["is_instantiable"] === true,
       properties: parseProperties(c),
       signals: parseSignals(c),
+      methods: parseMethods(c),
+      constants: parseConstants(c),
       enums: asArray(c["enums"]).flatMap((e) => {
         const parsed = parseEnum(e);
         return parsed ? [parsed] : [];
@@ -166,10 +175,24 @@ function parseProperties(c: Record<string, unknown>): ApiProperty[] {
     const type = p ? str(p["type"]) : undefined;
     if (!p || name === undefined || type === undefined) return [];
     const setter = str(p["setter"]);
+    const getter = str(p["getter"]);
     const args = setter === undefined ? undefined : setters.get(setter);
     const enumName = type !== "int" || args?.length !== 1 ? undefined : enumRefOf(args[0]);
-    return [enumName === undefined ? { name, type } : { name, type, enumName }];
+    return [enumName === undefined ? { name, type, ...(getter ? { getter } : {}), ...(setter ? { setter } : {}) } : { name, type, enumName, ...(getter ? { getter } : {}), ...(setter ? { setter } : {}) }];
   });
+}
+
+function parseMethods(c: Record<string, unknown>): ApiMethod[] {
+  return asArray(c["methods"]).flatMap((raw) => {
+    const m = asRecord(raw); const name = m ? str(m["name"]) : undefined;
+    if (!m || !name) return [];
+    const args = asArray(m["arguments"]).flatMap((rawArg) => { const a = asRecord(rawArg); const argName = a ? str(a["name"]) : undefined; if (!a || !argName) return []; const type = str(a["type"]); const def = str(a["default_value"]); return [{ name: argName, ...(type ? { type } : {}), ...(def ? { defaultValue: def } : {}) }]; });
+    const ret = str(m["return_type"]); return [{ name, ...(ret ? { returnType: ret } : {}), arguments: args, isStatic: m["is_static"] === true, isVararg: m["is_vararg"] === true }];
+  });
+}
+
+function parseConstants(c: Record<string, unknown>): Array<{ name: string; value: number }> {
+  return asArray(c["constants"]).flatMap((raw) => { const x = asRecord(raw); const name = x ? str(x["name"]) : undefined; const value = x ? num(x["value"]) : undefined; return name === undefined || value === undefined ? [] : [{ name, value }]; });
 }
 
 /** `enum::Control.FocusMode` / `bitfield::Control.SizeFlags` → "Control.FocusMode";其它类型返回 undefined。 */
