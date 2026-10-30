@@ -12,6 +12,7 @@ import { runtimeInspectUi } from "./runtime/inspectUi.js";
 import { runtimeCheckAddonStatus } from "./runtime/checkAddonStatus.js";
 import { runtimeVisualDebug } from "./runtime/visualDebug.js";
 import { runtimeStartSession, runtimeGetSession, runtimeReadSessionLogs, runtimeStopSession } from "./runtime/sessionTools.js";
+import { projectCapabilities } from "./project/capabilities.js";
 import { sceneGetTree } from "./scene/getTree.js";
 import { sceneGetNodeInfo } from "./scene/getNodeInfo.js";
 import { sceneFindNodes } from "./scene/findNodes.js";
@@ -48,6 +49,8 @@ import { scriptCreate } from "./script/create.js";
 import { scriptAnalyze } from "./script/analyze.js";
 import { scriptFindReferences } from "./script/findReferences.js";
 import { scriptUpdateFunction } from "./script/updateFunction.js";
+import { scriptProjectGraph } from "./script/projectGraph.js";
+import { classGetInfo, classSearch, classValidateMember } from "./class/metadata.js";
 
 export const allTools: ToolDefinition<AppContext>[] = [
   utilityPing,
@@ -64,6 +67,7 @@ export const allTools: ToolDefinition<AppContext>[] = [
   runtimeGetSession,
   runtimeReadSessionLogs,
   runtimeStopSession,
+  projectCapabilities,
   sceneGetTree,
   sceneGetNodeInfo,
   sceneFindNodes,
@@ -98,6 +102,10 @@ export const allTools: ToolDefinition<AppContext>[] = [
   scriptAnalyze,
   scriptFindReferences,
   scriptUpdateFunction,
+  scriptProjectGraph,
+  classGetInfo,
+  classSearch,
+  classValidateMember,
   assetList,
   assetGetInfo,
 ];
