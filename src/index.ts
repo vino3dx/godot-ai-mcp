@@ -7,7 +7,7 @@ import { startSdkServer } from "./mcp/server/sdkServer.js";
 import { createAppContext, type AppContext } from "./services/context.js";
 import { allTools } from "./tools/index.js";
 
-export const SERVER_INFO = { name: "godot-ai-mcp", version: "1.1.0" } as const;
+export const SERVER_INFO = { name: "godot-ai-mcp", version: "1.2.0" } as const;
 
 export function buildHost(logger = createLogger()): ToolHost<AppContext> {
   const registry = new ToolRegistry<AppContext>().registerAll(allTools);

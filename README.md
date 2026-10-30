@@ -77,7 +77,7 @@ npx -y vinofx-godot-ai-mcp
 That last command starts a **stdio MCP server**. It logs
 
 ```text
-[godot-ai-mcp] INFO MCP server "godot-ai-mcp@1.1.0" listening on stdio, 30 tools exposed
+[godot-ai-mcp] INFO MCP server "godot-ai-mcp@1.2.0" listening on stdio, 30 tools exposed
 ```
 
 to stderr, then waits for JSON-RPC on stdin (Ctrl+C to quit). You normally never run it by hand — your AI client launches it after the configuration below.
@@ -260,7 +260,7 @@ npx -y vinofx-godot-ai-mcp
 最后这条命令会启动一个 **stdio MCP 服务**，它先输出
 
 ```text
-[godot-ai-mcp] INFO MCP server "godot-ai-mcp@1.1.0" listening on stdio, 30 tools exposed
+[godot-ai-mcp] INFO MCP server "godot-ai-mcp@1.2.0" listening on stdio, 30 tools exposed
 ```
 
 然后等待 stdin 上的 JSON-RPC 消息（Ctrl+C 退出）。通常你不需要手动运行它 —— AI 客户端在完成下面的配置后会自己拉起。
