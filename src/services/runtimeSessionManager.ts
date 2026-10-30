@@ -70,6 +70,7 @@ export class RuntimeSessionManager {
     record.sessionId = sessionId; record.projectRoot = projectRoot; record.scene = options.scene;
     record.state = "starting"; record.createdAt = now(); record.updatedAt = record.createdAt; record.timedOut = false;
     record.handle = handle; record.logs = new BoundedLogBuffer(options.logMaxBytesPerStream); record.exited = false;
+    record.pid = handle.pid;
     record.exitPromise = handle.exited;
     this.sessions.set(sessionId, record); this.activeByProject.set(projectRoot, sessionId);
     handle.onStdout((chunk) => record.logs.append("stdout", chunk));
