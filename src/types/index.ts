@@ -24,7 +24,7 @@ export interface JsonSchema {
 
 /** 工具领域,与 src/tools/<domain> 目录一一对应。 */
 export type ToolDomain =
-  | "project" | "scene" | "node" | "resource" | "script" | "shader" | "material"
+  | "project" | "scene" | "node" | "class" | "resource" | "script" | "shader" | "material"
   | "animation" | "filesystem" | "asset" | "debug" | "runtime" | "utility"
   | "ui" | "tilemap" | "particles" | "navigation" | "audio"; // 后五个属于第二版领域
 
