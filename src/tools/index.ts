@@ -11,6 +11,7 @@ import { runtimeCaptureScreenshot } from "./runtime/captureScreenshot.js";
 import { runtimeInspectUi } from "./runtime/inspectUi.js";
 import { runtimeCheckAddonStatus } from "./runtime/checkAddonStatus.js";
 import { runtimeVisualDebug } from "./runtime/visualDebug.js";
+import { runtimeStartSession, runtimeGetSession, runtimeReadSessionLogs, runtimeStopSession } from "./runtime/sessionTools.js";
 import { sceneGetTree } from "./scene/getTree.js";
 import { sceneGetNodeInfo } from "./scene/getNodeInfo.js";
 import { sceneFindNodes } from "./scene/findNodes.js";
@@ -59,6 +60,10 @@ export const allTools: ToolDefinition<AppContext>[] = [
   runtimeInspectUi,
   runtimeCheckAddonStatus,
   runtimeVisualDebug,
+  runtimeStartSession,
+  runtimeGetSession,
+  runtimeReadSessionLogs,
+  runtimeStopSession,
   sceneGetTree,
   sceneGetNodeInfo,
   sceneFindNodes,
