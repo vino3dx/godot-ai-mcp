@@ -1,4 +1,5 @@
 # godot-ai-mcp
+![img](./assets/Cover.jpg)
 
 [![npm version](https://img.shields.io/npm/v/vinofx-godot-ai-mcp.svg)](https://www.npmjs.com/package/vinofx-godot-ai-mcp)
 [![Godot](https://img.shields.io/badge/Godot-4.6.3+-478CBF?logo=godotengine&logoColor=white)](https://godotengine.org/)
