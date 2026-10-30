@@ -60,6 +60,15 @@ test("getScriptInfo: 非 export 的普通 var 与函数不被收集", () => {
   assert.ok(!info.exports.some((e) => e.name === "health"));
 });
 
+test("GDScript intelligence: annotations, signals, enums, constants and method signatures", () => {
+  const info = service.analyze(`@tool\nextends Node2D\nclass_name Actor\nsignal hit(target: Node, amount: int = 1)\nenum State { IDLE, RUN = 2 }\nconst SPEED: float = 3.0\nstatic func make(value: Vector2, scale: float = 1.0) -> Actor:\n\treturn null\n`);
+  assert.deepEqual(info.annotations, ["@tool"]);
+  assert.deepEqual(info.signals[0], { name: "hit", parameters: [{ name: "target", type: "Node" }, { name: "amount", type: "int", default: "1" }] });
+  assert.deepEqual(info.enums[0], { name: "State", values: [{ name: "IDLE" }, { name: "RUN", value: "2" }] });
+  assert.deepEqual(info.constants[0], { name: "SPEED", type: "float", value: "3.0" });
+  assert.deepEqual(info.methods[0], { name: "make", line: 7, static: true, parameters: [{ name: "value", type: "Vector2" }, { name: "scale", type: "float", default: "1.0" }], returnType: "Actor", signature: "static func make(value: Vector2, scale: float = 1.0) -> Actor:" });
+});
+
 test("analyze: 识别函数、变量和信号", () => {
   const info = service.analyze(SCRIPT + "\nsignal health_changed(value: int)\nfunc take_damage(amount: int) -> void:\n\thealth -= amount\n");
   assert.deepEqual(info.symbols.filter((s) => ["signal", "function"].includes(s.kind)), [
